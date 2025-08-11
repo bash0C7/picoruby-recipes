@@ -22,14 +22,20 @@ orange_b = 0
 
 puts "Setting all LEDs to orange color..."
 
-# 全LEDをオレンジ色で点灯
+# 色配列初期化
 colors = Array.new(led_count) { [orange_r, orange_g, orange_b] }
-led.show_rgb(*colors)
 
-puts "Orange LEDs lit - brightness level 30"
-puts "Program complete"
+puts "Starting continuous LED display..."
 
-# 連続点灯維持
+# 連続点灯ループ
 loop do
-  sleep_ms 1000
+  # 毎回色を設定してLED更新
+  led_count.times do |i|
+    colors[i] = [orange_r, orange_g, orange_b]
+  end
+  
+  # LED表示更新
+  led.show_rgb(*colors)
+  
+  sleep_ms 100  # 100ms間隔で更新
 end
