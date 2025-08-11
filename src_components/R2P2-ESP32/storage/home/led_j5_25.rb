@@ -1,5 +1,5 @@
-# ATOM Matrix Internal 5x5 LED Control - Simple Orange Light
-# Built-in WS2812 LEDs connected to GPIO 27
+# J5 LED Strip Control - 25 LEDs Orange Light
+# WS2812 LED strip connected to J3 port (G25)
 # Using picoruby-ws2812 gem
 
 require 'ws2812'
@@ -7,7 +7,7 @@ require 'ws2812'
 puts "ATOM Matrix Internal LED Starting..."
 
 # LED設定
-led_pin = 27
+led_pin = 25
 led_count = 25
 
 # WS2812初期化

@@ -1,5 +1,5 @@
 # ATOM Matrix ext grove LED
-# Built-in WS2812 LEDs connected to GPIO 32(ext grove)
+# ext WS2812 LEDs connected to GPIO 32(ext grove)
 # Using picoruby-ws2812 gem
 
 require 'ws2812'
