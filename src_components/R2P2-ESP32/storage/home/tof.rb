@@ -26,9 +26,6 @@ vl53l0x = VL53L0X.new(i2c)
 # Check sensor initialization
 if vl53l0x.ready?
   puts "VL53L0X sensor initialized successfully"
-  puts "Measurement range: 30mm - 2000mm"
-  puts "Laser wavelength: 940nm"
-  puts "Measurement accuracy: ±3%"
 else
   puts "Failed to initialize VL53L0X sensor"
   puts "Check connections:"

@@ -1,4 +1,4 @@
-giMRuby::CrossBuild.new("esp32") do |conf|
+MRuby::CrossBuild.new("esp32") do |conf|
   conf.toolchain("gcc")
 
   conf.cc.command = "xtensa-esp32-elf-gcc"
