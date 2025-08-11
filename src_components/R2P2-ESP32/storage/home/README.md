@@ -7,13 +7,16 @@
 Unit ASR音声認識モジュール（CI-03T）による音声コマンド検出プログラム。
 
 **機能:**
-- "open"コマンドの音声認識
-- 標準音声コマンド（"ok", "hello", "turn on lights"等）の処理
-- GroveポートUART通信（GPIO26:TX, GPIO32:RX）
+- "hello"コマンド認識時：内蔵LEDをオレンジ色表示
+- "ok"コマンド認識時：内蔵LEDをシアン色表示
+- 待機時：内蔵LEDを暗い青色表示
+- Grove UART通信による高速データ処理（115200bps）
+- メモリ効率重視の5バイト一括読み取り
 
 **動作要件:**
-- 接続: Grove UART（115200bps）
-- カスタム"open"コマンドはコマンドコード0x50で設定済み
+- 接続: Grove UART（GPIO26:TX, GPIO32:RX, 115200bps）
+- LED制御: GPIO27（内蔵5x5マトリックス, 25個）
+- コマンドコード: 0x32("hello"), 0x30("ok")
 
 # led_ext.rb
 
@@ -56,7 +59,7 @@ ATOM Matrix内蔵5x5 LEDマトリックス制御プログラム。
 - メモリ最適化の整数演算による三角波アニメーション
 
 **接続:**
-- GPIO19（J5 PortD）
+- GPIO22（J5 PortD）
 - 60個WS2812 LEDストリップ
 - MPU6886（内蔵I2C, SDA:25, SCL:21）
 
