@@ -5,8 +5,8 @@
 require 'uart'
 
 # Grove GPIO configuration 
-UART_TX = 26  # PortD G19 for MIDI TX
-UART_RX = 32  # PortD G22 for MIDI RX
+UART_TX = 26  # Grove SDA → UART TX
+UART_RX = 32  # Grove SCL → UART RX
 
 uart = UART.new(
   unit: :ESP32_UART1,
