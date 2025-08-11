@@ -3,86 +3,122 @@
 
 # https://docs.m5stack.com/ja/unit/Unit%20ASR
 
-require 'ws2812'
-require 'uart'
-
 # ATOM Matrix + Unit ASR 簡素版
 # hello / ok のみ対応
+
+require 'ws2812'
+require 'uart'
 
 # 設定
 LED_COUNT = 25
 LED_PIN = 27
-# ATOM MatrixのGroveポート: SDA=26, SCL=32（通常はI2C）
-# でもUART使用時はTX/RXとして使用可能
-UART_TX = 26  # Grove SDA → UART TX  
-UART_RX = 32  # Grove SCL → UART RX
+UART_TX = 26
+UART_RX = 32
 
 # 初期化
 uart = UART.new(unit: :ESP32_UART1, baudrate: 115200, txd_pin: UART_TX, rxd_pin: UART_RX)
 led = WS2812.new(RMTDriver.new(LED_PIN))
-colors = Array.new(LED_COUNT) { [0, 0, 10] }  # 初期：暗い青
 
-# 色定義（20%輝度）
-color_hello = [51, 25, 0]     # オレンジ - "hello"
-color_ok = [0, 25, 51]        # シアン - "ok" 
-color_standby = [0, 0, 10]    # 暗い青
-
-# 現在の色
-current_color = color_standby
-
-# Unit ASR初期化
+# UART初期化後の読み捨て（重要！）
 puts "UART初期化完了"
-uart.write("\xAA\x55\xB1\x05")
-sleep_ms(500)
-puts "Unit ASR 準備完了"
+sleep_ms(1000)  # ASRモジュールの起動完了を待つ
+uart.clear_rx_buffer()  # 古いデータを全削除
+puts "UARTバッファクリア完了"
 
-puts "LED初期化開始..."
-# 初期表示
-LED_COUNT.times { |i| colors[i] = current_color }
-puts "色配列設定完了"
+# 色定義
+COLOR_HELLO = [51, 25, 0]    # オレンジ
+COLOR_OK = [0, 25, 51]       # シアン  
+COLOR_STANDBY = [0, 0, 10]   # 暗い青
 
-led.show_rgb(*colors)
-puts "LED表示完了"
+current_colors = Array.new(LED_COUNT) { COLOR_STANDBY.dup }
+led.show_rgb(*current_colors)
 
-puts "メインループ開始"
+# 受信バッファ（シンプル配列）
+rx_buffer = []
+
+puts "初期化完了"
+
+# LED更新関数
+def update_leds(led, current_colors, new_color)
+  LED_COUNT.times { |i| current_colors[i] = new_color.dup }
+  led.show_rgb(*current_colors)
+end
+
+# バッファからパケット検出（C++ロジック移植）
+def find_and_parse_packet(buffer)
+  return nil if buffer.length < 5
+  
+  # ヘッダー0xAA 0x55を探す（1バイトずつスライド）
+  i = 0
+  while i <= buffer.length - 5
+    if buffer[i] == 0xAA && buffer[i + 1] == 0x55
+      # ヘッダー発見！フッターもチェック
+      if buffer[i + 3] == 0x55 && buffer[i + 4] == 0xAA
+        # 完全なパケット発見
+        cmd = buffer[i + 2]
+        
+        # 処理済みデータを削除（パケット部分）
+        (i + 5).times { buffer.shift }
+        
+        return cmd
+      end
+    end
+    i += 1
+  end
+  
+  # ヘッダーが見つからない場合、最初の方を削除（メモリ節約）
+  if buffer.length > 10
+    5.times { buffer.shift }
+  end
+  
+  return nil
+end
+
+# UART受信処理
+def receive_data(uart, buffer)
+  # 利用可能なバイトを全て読む（バースト受信対応）
+  while uart.bytes_available > 0
+    data = uart.read(1)
+    if data && data.length == 1
+      buffer.push(data[0].ord)
+    end
+    
+    # バッファサイズ制限（メモリ保護）
+    if buffer.length > 20
+      buffer.shift
+    end
+  end
+end
 
 # メインループ
 loop_count = 0
-puts "メインループ開始"
 
 loop do
   loop_count += 1
-  if loop_count % 20 == 0  # 20回に1回状況表示（頻繁に）
-    puts "ループ: #{loop_count}"
-  end
   
-  # UART受信確認（メモリ効率重視・簡素版）
-  if uart.bytes_available >= 5
-    puts "データ受信"
-    
-    # 5バイト一括読み取り（シンプル）
-    data = uart.read(5)
-    
-    if data && data.length == 5 &&
-       data[0].ord == 0xAA && data[1].ord == 0x55 &&
-       data[3].ord == 0x55 && data[4].ord == 0xAA
-      
-      cmd = data[2].ord
-      puts "コマンド認識"
-      
-      if cmd == 0x32  # hello
-        puts "hello"
-        current_color = color_hello
-        LED_COUNT.times { |i| colors[i] = current_color }
-        led.show_rgb(*colors)
-      elsif cmd == 0x30  # ok
-        puts "ok"
-        current_color = color_ok
-        LED_COUNT.times { |i| colors[i] = current_color }
-        led.show_rgb(*colors)
-      end
+  # UART受信
+  receive_data(uart, rx_buffer)
+  
+  # パケット解析
+  cmd = find_and_parse_packet(rx_buffer)
+  
+  if cmd
+    case cmd
+    when 0x32  # hello
+      puts "hello"
+      update_leds(led, current_colors, COLOR_HELLO)
+    when 0x30  # ok  
+      puts "ok"
+      update_leds(led, current_colors, COLOR_OK)
+    else
+      puts "未知: 0x#{cmd.to_s(16)}"
     end
   end
   
-  sleep_ms(50)
+  # デバッグ出力（頻度削減）
+  if loop_count % 1000 == 0
+    puts "ループ: #{loop_count}, バッファ: #{rx_buffer.length}"
+  end
+  
+  sleep_ms(10)  # 高頻度チェック
 end
