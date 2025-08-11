@@ -26,10 +26,10 @@ loop do
   # 温度取得
   temp = mpu.temperature
   
-  # データ表示
-  puts "Accel: X=#{accel[:x].round(3)}, Y=#{accel[:y].round(3)}, Z=#{accel[:z].round(3)} [G]"
-  puts "Gyro:  X=#{gyro[:x].round(1)}, Y=#{gyro[:y].round(1)}, Z=#{gyro[:z].round(1)} [deg/s]"
-  puts "Temp:  #{temp.round(1)} [C]"
+  # データ表示（手動丸め処理）
+  puts "Accel: X=#{(accel[:x] * 1000).to_i / 1000.0}, Y=#{(accel[:y] * 1000).to_i / 1000.0}, Z=#{(accel[:z] * 1000).to_i / 1000.0} [G]"
+  puts "Gyro:  X=#{(gyro[:x] * 10).to_i / 10.0}, Y=#{(gyro[:y] * 10).to_i / 10.0}, Z=#{(gyro[:z] * 10).to_i / 10.0} [deg/s]"
+  puts "Temp:  #{(temp * 10).to_i / 10.0} [C]"
   puts "---"
   
   sleep_ms 500  # 500ms間隔

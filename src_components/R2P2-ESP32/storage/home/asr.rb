@@ -3,73 +3,86 @@
 
 # https://docs.m5stack.com/ja/unit/Unit%20ASR
 
+require 'ws2812'
 require 'uart'
 
-puts "Unit ASR Voice Recognition System Starting..."
+# ATOM Matrix + Unit ASR 簡素版
+# hello / ok のみ対応
 
-# Grove UART initialization for Unit ASR connection
-uart = UART.new(
-  unit: :ESP32_UART1,
-  baudrate: 115200,
-  txd_pin: 26,    # Grove SDA -> UART TX
-  rxd_pin: 32     # Grove SCL -> UART RX  
-)
+# 設定
+LED_COUNT = 25
+LED_PIN = 27
+# ATOM MatrixのGroveポート: SDA=26, SCL=32（通常はI2C）
+# でもUART使用時はTX/RXとして使用可能
+UART_TX = 26  # Grove SDA → UART TX  
+UART_RX = 32  # Grove SCL → UART RX
 
-puts "UART initialized (115200bps, TX:26, RX:32)"
+# 初期化
+uart = UART.new(unit: :ESP32_UART1, baudrate: 115200, txd_pin: UART_TX, rxd_pin: UART_RX)
+led = WS2812.new(RMTDriver.new(LED_PIN))
+colors = Array.new(LED_COUNT) { [0, 0, 10] }  # 初期：暗い青
 
-# Unit ASR initialization command
-puts "Initializing Unit ASR..."
+# 色定義（20%輝度）
+color_hello = [51, 25, 0]     # オレンジ - "hello"
+color_ok = [0, 25, 51]        # シアン - "ok" 
+color_standby = [0, 0, 10]    # 暗い青
+
+# 現在の色
+current_color = color_standby
+
+# Unit ASR初期化
+puts "UART初期化完了"
 uart.write("\xAA\x55\xB1\x05")
-sleep_ms 500
+sleep_ms(500)
+puts "Unit ASR 準備完了"
 
-puts "Voice recognition ready"
-puts "Say 'open' command"
+puts "LED初期化開始..."
+# 初期表示
+LED_COUNT.times { |i| colors[i] = current_color }
+puts "色配列設定完了"
 
-# Main loop - voice recognition processing
+led.show_rgb(*colors)
+puts "LED表示完了"
+
+puts "メインループ開始"
+
+# メインループ
+loop_count = 0
+puts "メインループ開始"
+
 loop do
-  # Check UART received data
-  if uart.bytes_available > 0
-    data = uart.read
+  loop_count += 1
+  if loop_count % 20 == 0  # 20回に1回状況表示（頻繁に）
+    puts "ループ: #{loop_count}"
+  end
+  
+  # UART受信確認（メモリ効率重視・簡素版）
+  if uart.bytes_available >= 5
+    puts "データ受信"
     
-    # Convert received data to byte array
-    bytes = data.bytes
+    # 5バイト一括読み取り（シンプル）
+    data = uart.read(5)
     
-    # Unit ASR data format check: AA 55 [command] 55 AA
-    if bytes.length >= 5 && bytes[0] == 0xAA && bytes[1] == 0x55
-      command_code = bytes[2]
+    if data && data.length == 5 &&
+       data[0].ord == 0xAA && data[1].ord == 0x55 &&
+       data[3].ord == 0x55 && data[4].ord == 0xAA
       
-      # Process existing commands
-      case command_code
-      when 0x30  # "ok"
-        puts "Recognized: OK"
-      when 0x31  # "hi, ASR"
-        puts "Recognized: Hi ASR"
-      when 0x32  # "hello"
-        puts "Recognized: Hello"
-      when 0x18  # "turn on the lights"
-        puts "Recognized: Light ON"
-      when 0x19  # "turn off the lights"  
-        puts "Recognized: Light OFF"
-      else
-        # Custom command or unknown command
-        puts "Received command code: 0x#{command_code.to_s(16).upcase}"
+      cmd = data[2].ord
+      puts "コマンド認識"
+      
+      if cmd == 0x32  # hello
+        puts "hello"
+        current_color = color_hello
+        LED_COUNT.times { |i| colors[i] = current_color }
+        led.show_rgb(*colors)
+      elsif cmd == 0x30  # ok
+        puts "ok"
+        current_color = color_ok
+        LED_COUNT.times { |i| colors[i] = current_color }
+        led.show_rgb(*colors)
       end
-      
-      # "open" command detection
-      # Note: Unit ASR custom command configuration required
-      # Using command code 0x50 as "open" command
-      if command_code == 0x50  # Custom "open" command
-        puts "check, set OPEN"
-      end
-      
-      # Debug: display received data
-      hex_data = bytes.map { |b| "0x#{b.to_s(16).upcase}" }.join(" ")
-      puts "Received data: #{hex_data}"
-    else
-      # Invalid data format
-      puts "Invalid data: #{data}"
     end
   end
   
-  sleep_ms 50  # Reduce CPU load
+  sleep_ms(50)
 end
