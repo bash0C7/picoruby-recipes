@@ -4,7 +4,6 @@
 # https://docs.m5stack.com/ja/unit/Unit%20ASR
 
 # ATOM Matrix + Unit ASR 簡素版
-# hello / ok のみ対応
 
 require 'ws2812'
 require 'uart'
@@ -16,14 +15,17 @@ UART_TX = 26
 UART_RX = 32
 
 # 初期化
-uart = UART.new(unit: :ESP32_UART1, baudrate: 115200, txd_pin: UART_TX, rxd_pin: UART_RX)
 led = WS2812.new(RMTDriver.new(LED_PIN))
+uart = UART.new(unit: :ESP32_UART1, baudrate: 115200, txd_pin: UART_TX, rxd_pin: UART_RX)
 
-# UART初期化後の読み捨て（重要！）
 puts "UART初期化完了"
-sleep_ms(1000)  # ASRモジュールの起動完了を待つ
-uart.clear_rx_buffer()  # 古いデータを全削除
-puts "UARTバッファクリア完了"
+sleep_ms(100)  # ハードウェア安定化待ち
+
+# Unit ASR起動完了を待つ（Arduino版に合わせる）
+puts "Unit ASR起動待ち..."
+sleep_ms(3000)  # 3秒待機（モジュール起動時間）
+uart.clear_rx_buffer()  # 起動時のノイズも削除
+puts "Unit ASR準備完了"
 
 # 色定義
 COLOR_HELLO = [51, 25, 0]    # オレンジ
@@ -37,6 +39,9 @@ led.show_rgb(*current_colors)
 rx_buffer = []
 
 puts "初期化完了"
+puts "*** 使用方法 ***"
+puts "1. 'Hi M Five' と言ってウェイクアップ"
+puts "2. 'hello' または 'ok' でコマンド実行"
 
 # LED更新関数
 def update_leds(led, current_colors, new_color)
