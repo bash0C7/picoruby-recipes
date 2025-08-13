@@ -204,6 +204,10 @@ i2c.write(0x3e, 0x00, 0x38)  # LCD初期化例
 
 この仕様は公式ドキュメント（docs.m5stack.com）および実装検証に基づく正確な情報です。I2Cバスの併用可能性についても実装例で検証済みです。
 
+## ながらRuby会議01デモファイル
+
+`src_components/R2P2-ESP32/storage/home/`内の「N」から始まるRubyファイルは、ながらRuby会議01カンファレンス専用のデモファイルです。
+これらのファイルは通常のレシピとは別扱いで、README.mdには記載されません。
 
 # ATOM Matrix UART通信仕様
 UART初期化パターン
