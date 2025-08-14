@@ -1,7 +1,7 @@
 
 # N30cm_int.rb - ATOM Matrix外付けLED光源ペンライト
 # 
-# ATOM Matrixの外付け60 LEDストリップ(60個)を光源として使用
+# ATOM Matrixの外付け60 LEDストリップ(MAX60個)を光源として使用
 # 100cmのアクリル透明筒にトレーシングペーパーを巻いたペンライト演出
 # 光を拡散させて柔らかい照明効果を実現
 # WS2812 LED strip connected to J5 port (G22)
@@ -12,8 +12,8 @@ require 'ws2812'
 puts "ATOM Matrix Internal LED Starting..."
 
 # LED設定
-led_pin = 32
-led_count = 15
+led_pin = 22
+led_count = 60
 
 # WS2812初期化
 led = WS2812.new(RMTDriver.new(led_pin))
@@ -21,8 +21,8 @@ led = WS2812.new(RMTDriver.new(led_pin))
 puts "LED initialized (GPIO #{led_pin}, #{led_count} LEDs)"
 
 # オレンジ色設定
-orange_r = 75
-orange_g = 38
+orange_r = 200
+orange_g = 100
 orange_b = 0
 
 
