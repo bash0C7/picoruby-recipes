@@ -35,5 +35,6 @@ MRuby::CrossBuild.new("esp32") do |conf|
   conf.gem github: 'bash0C7/picoruby-mpu6886', branch: 'main'
   conf.gem github: 'ksbmyk/picoruby-ws2812', branch: 'main'
   conf.gem github: 'bash0C7/picoruby-vl53l0x', branch: 'main'
+  conf.gem github: 'bash0C7/picoruby-M5Unit-ASR', branch: 'main'
   conf.picoruby(alloc_libc: false)
 end
