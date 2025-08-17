@@ -1,10 +1,5 @@
-
-# N30cm_int.rb - ATOM Matrix外付けLED光源ペンライト
-# 
-# ATOM Matrixの外付け60 LEDストリップ(MAX60個)を光源として使用
-# 100cmのアクリル透明筒にトレーシングペーパーを巻いたペンライト演出
-# 光を拡散させて柔らかい照明効果を実現
-# WS2812 LED strip connected to J5 port (G22)
+# ATOM Matrix Internal 5x5 LED Control - Simple Orange Light
+# Built-in WS2812 LEDs connected to GPIO 27
 # Using picoruby-ws2812 gem
 
 require 'ws2812'
@@ -12,19 +7,18 @@ require 'ws2812'
 puts "ATOM Matrix Internal LED Starting..."
 
 # LED設定
-led_pin = 22
-led_count = 60
+led_pin = 27
+led_count = 25
 
 # WS2812初期化
 led = WS2812.new(RMTDriver.new(led_pin))
 
-puts "LED initialized (GPIO #{led_pin}, #{led_count} LEDs)"
+puts "LED initialized (GPIO 27, 25 LEDs)"
 
-# オレンジ色設定
-orange_r = 200
-orange_g = 100
+# オレンジ色設定（安全な輝度30）
+orange_r = 30
+orange_g = 15
 orange_b = 0
-
 
 puts "Setting all LEDs to orange color..."
 
@@ -45,3 +39,4 @@ loop do
   
   sleep_ms 100  # 100ms間隔で更新
 end
+

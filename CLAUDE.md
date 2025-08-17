@@ -206,7 +206,7 @@ i2c.write(0x3e, 0x00, 0x38)  # LCD初期化例
 
 ## ながらRuby会議01デモファイル
 
-`src_components/R2P2-ESP32/storage/home/`内の「N」から始まるRubyファイルは、ながらRuby会議01カンファレンス専用のデモファイルです。
+`src_components/R2P2-ESP32/storage/home/`内の「n」から始まるRubyファイルは、ながらRuby会議01カンファレンス専用のデモファイルです。
 これらのファイルは通常のレシピとは別扱いで、README.mdには記載されません。
 
 # ATOM Matrix UART通信仕様
