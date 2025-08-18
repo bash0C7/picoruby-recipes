@@ -3,13 +3,13 @@
 require 'uart'
 require 'ws2812'
 
-UART_TX = 26  # PortD G19 for MIDI TX
-UART_RX = 32  # PortD G22 for MIDI RX
+MIDI_TX = 23  # J4のG23ピン
+MIDI_RX = 33  # J4のG33ピン  
 
 puts "MIDI Through + LED"
 
 pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
-unit_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: UART_TX, rxd_pin: UART_RX)
+midi_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: MIDI_TX, rxd_pin: MIDI_RX)
 
 LED_PIN = 22
 LED_COUNT = 60
@@ -25,7 +25,7 @@ loop do
   # MIDI受信・転送
   data = pc_uart.read
   if data && data.length > 0
-    unit_uart.write(data)
+    midi_uart.write(data)
     
     data.each_byte do |byte|
       midi_bytes.push(byte)
