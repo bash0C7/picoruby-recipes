@@ -22,7 +22,7 @@ asr = UnitASR.new(UART.new(unit: :ESP32_UART1, baudrate: 115200, txd_pin: UART_T
 # MIDI UART設定（別のピン使用）
 MIDI_TX = 23  # J4のG23ピン
 MIDI_RX = 33  # J4のG33ピン  
-midi_uart = UART.new(unit: :ESP32_UART2, baudrate: 31250, txd_pin: MIDI_TX, rxd_pin: MIDI_RX)
+midi_uart = UART.new(unit: :ESP32_UART0, baudrate: 31250, txd_pin: MIDI_TX, rxd_pin: MIDI_RX)
 
 # MIDI効果音再生関数
 def play_effect_sound(uart, program, note, velocity, duration_ms)
