@@ -6,7 +6,7 @@ require 'ws2812'
 MIDI_TX = 23  # J4のG23ピン
 MIDI_RX = 33  # J4のG33ピン  
 
-puts "MIDI Through + LED"
+puts "MIDI Through + LED + Chiff Lead + Wide Light"
 
 pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
 midi_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: MIDI_TX, rxd_pin: MIDI_RX)
@@ -17,9 +17,20 @@ LED_COUNT = 60
 led = WS2812.new(RMTDriver.new(LED_PIN))
 colors = Array.new(LED_COUNT) { [0, 0, 0] }
 
-# MIDI変数
+# MIDI変数（シンプル化）
 note_leds = Array.new(LED_COUNT, 0)
 midi_bytes = []
+
+# 音域定義
+NOTE_MIN = 36
+NOTE_MAX = 84
+
+# 起動時にChiff Lead音色に設定
+sleep_ms(1000)
+program_change = [0xC0, 83].map(&:chr).join
+midi_uart.write(program_change)
+puts "音色設定: Chiff Lead"
+sleep_ms(100)
 
 loop do
   # MIDI受信・転送
@@ -37,57 +48,55 @@ loop do
         velocity = midi_bytes[-1]
         
         if status >= 0x90 && status <= 0x9F && velocity > 0
-          # 光る場所：ノート番号をLED_COUNTで割った余り
-          led_pos = note % LED_COUNT
-          
-          # 輝度：ベロシティ * 2（最大255）
-          brightness = velocity * 2
-          brightness = brightness > 255 ? 255 : brightness
-          
-          # 色：オクターブ（ノート/12）で決定
-          octave = note / 12
-          r = 0
-          g = 0
-          b = 0
-          case octave % 6
-          when 0  # 赤
-            r = brightness
-          when 1  # 黄
-            r = brightness
-            g = brightness / 2
-          when 2  # 緑
-            g = brightness
-          when 3  # シアン
-            g = brightness / 2
-            b = brightness
-          when 4  # 青
-            b = brightness
-          when 5  # マゼンタ
-            r = brightness / 2
-            b = brightness
+          if note >= NOTE_MIN && note <= NOTE_MAX
+            center_pos = ((note - NOTE_MIN) * (LED_COUNT - 1)) / (NOTE_MAX - NOTE_MIN)
+            
+            # 色計算（オクターブベース）
+            octave = (note - NOTE_MIN) / 12
+            
+            # 中心から前後5つずつ光らせる（直接ループ）
+            start_pos = center_pos - 5
+            start_pos = 0 if start_pos < 0
+            end_pos = center_pos + 5
+            end_pos = LED_COUNT - 1 if end_pos >= LED_COUNT
+            
+            i = start_pos
+            while i <= end_pos
+              distance = (i - center_pos).abs
+              if distance <= 5
+                # 明度計算（中心255 → 端51）
+                brightness = 255 - (distance * 41)
+                
+                # 色計算（その都度）
+                r = 0
+                g = 0
+                b = 0
+                case octave % 6
+                when 0  # 赤
+                  r = brightness
+                when 1  # 黄
+                  r = brightness
+                  g = brightness / 2
+                when 2  # 緑
+                  g = brightness
+                when 3  # シアン
+                  g = brightness / 2
+                  b = brightness
+                when 4  # 青
+                  b = brightness
+                when 5  # マゼンタ
+                  r = brightness / 2
+                  b = brightness
+                end
+                
+                colors[i] = [r, g, b]
+                note_leds[i] = brightness
+              end
+              i += 1
+            end
+            
+            puts "Note: #{note}, LED: #{center_pos}, Oct: #{octave}"
           end
-          
-          # メインLED
-          colors[led_pos] = [r, g, b]
-          note_leds[led_pos] = brightness
-          
-          # 周囲LEDに弱い光（簡単版）
-          weak = brightness / 4
-          weak_r = r / 4
-          weak_g = g / 4
-          weak_b = b / 4
-          
-          # 隣接前後2方向（1次元LED用）
-          neighbors = []
-          neighbors.push(led_pos - 1) if led_pos > 0              # 前
-          neighbors.push(led_pos + 1) if led_pos < LED_COUNT - 1  # 後
-          
-          neighbors.each do |pos|
-            colors[pos] = [weak_r, weak_g, weak_b]
-            note_leds[pos] = weak
-          end
-          
-          puts "Note: #{note}, LED: #{led_pos}, Oct: #{octave}, Vel: #{velocity}"
         end
         
         # バッファ制限
@@ -99,16 +108,21 @@ loop do
   end
   
   # LED更新と減衰
-  LED_COUNT.times do |i|
+  i = 0
+  while i < LED_COUNT
     if note_leds[i] > 0
-      # 減衰処理
-      note_leds[i] -= 5
+      note_leds[i] -= 3
       note_leds[i] = 0 if note_leds[i] < 0
+      
+      if note_leds[i] == 0
+        colors[i] = [0, 0, 0]
+      end
     else
       colors[i] = [0, 0, 0]
     end
+    i += 1
   end
   
   led.show_rgb(*colors)
-  sleep_ms(10)
+  sleep_ms(15)
 end

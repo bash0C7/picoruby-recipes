@@ -1,29 +1,62 @@
 require 'unimidi'
 require 'uart'
 
-# pc_unimidi.rb
-require 'unimidi'
-require 'uart'
+puts "デバイスチェック中..."
 
-# 利用可能なMIDI入力デバイスを表示
-puts "利用可能なMIDI入力デバイス:"
-UniMIDI::Input.all.each_with_index do |input, i|
+# 利用可能なMIDIデバイスを取得
+midi_devices = UniMIDI::Input.all
+if midi_devices.empty?
+  puts "エラー: MIDIデバイスが見つかりません"
+  exit 1
+end
+
+puts "見つかったMIDI入力デバイス:"
+midi_devices.each_with_index do |input, i|
   puts "#{i}: #{input.name}"
 end
 
-print "デバイス番号を選択: "
-device_num = gets.chomp.to_i
+# 利用可能なシリアルデバイスを取得
+serial_devices = Dir.glob('/dev/cu.usbserial*')
+if serial_devices.empty?
+  puts "エラー: /dev/cu.usbserial* のデバイスが見つかりません"
+  exit 1
+end
 
-# MIDI入力デバイスを選択
-input = UniMIDI::Input.all[device_num]
+puts "\n見つかったシリアルデバイス:"
+serial_devices.each_with_index do |device, i|
+  puts "#{i}: #{device}"
+end
+
+puts "\nデバイス確認完了！"
+
+print "\nMIDIデバイス番号を選択: "
+midi_device_num = gets.chomp.to_i
+
+if midi_device_num < 0 || midi_device_num >= midi_devices.length
+  puts "エラー: 無効なMIDIデバイス番号です"
+  exit 1
+end
+
+# MIDIデバイスを選択
+input = midi_devices[midi_device_num]
 input.open
-puts "選択: #{input.name}"
+puts "MIDI選択完了: #{input.name}"
 
-# ATOM Matrixとのシリアル接続（固定ポート）
-serial = UART.open('/dev/cu.usbserial-5D5A501DF0', 115200)
-puts "シリアル接続完了: /dev/cu.usbserial-5D5A501DF0"
+print "シリアルデバイス番号を選択: "
+serial_device_num = gets.chomp.to_i
 
-puts "PC → ATOM Matrix MIDI Bridge 開始"
+if serial_device_num < 0 || serial_device_num >= serial_devices.length
+  puts "エラー: 無効なシリアルデバイス番号です"
+  exit 1
+end
+
+selected_serial_device = serial_devices[serial_device_num]
+
+# ATOM Matrixとのシリアル接続
+serial = UART.open(selected_serial_device, 115200)
+puts "シリアル選択完了: #{selected_serial_device}"
+
+puts "\nPC → ATOM Matrix MIDI Bridge 開始"
 puts "MIDIデバイスを演奏してください..."
 
 # ポーリングループでMIDI入力をチェック
