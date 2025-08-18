@@ -21,19 +21,19 @@ UART_RX = 32
 asr = UnitASR.new(UART.new(unit: :ESP32_UART1, baudrate: 115200, txd_pin: UART_TX, rxd_pin: UART_RX))
 
 # コマンドハンドラー登録
-asr.add_handler(0x17) do  # "pause"
-  orange_r = 20
-  orange_g = 10
+asr.on(0x17) do  # "pause"
+  orange_r = 10
+  orange_g = 5
   orange_b = 0
 end
 
-asr.add_handler(0x30) do  # "ok"
-  orange_r = 100
-  orange_g = 50
+asr.on(0x30) do  # "ok"
+  orange_r = 50
+  orange_g = 20
   orange_b = 0
 end
 
-asr.add_handler(0x10) do  # "open"
+asr.on(0x10) do  # "open"
   orange_r = 220
   orange_g = 140
   orange_b = 0
