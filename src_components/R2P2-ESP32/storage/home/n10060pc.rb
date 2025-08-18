@@ -112,7 +112,7 @@ loop do
   puts "15. データ読み取り完了" if loop_count == 1
   
   if data && data.length > 0
-    puts "16. データあり: 長さ#{data.length}" if loop_count <= 3
+    puts "★受信データ: 長さ#{data.length} 内容:#{data.bytes.map{|b| sprintf('%02X', b)}.join(' ')}"
     
     puts "17. MIDI転送開始" if loop_count <= 3
     $midi_uart.write(data)
@@ -124,21 +124,25 @@ loop do
       puts "20. バイト#{byte_index}処理中" if loop_count == 1
       
       byte = data[byte_index].ord
-      puts "21. ord処理完了: #{byte}" if loop_count == 1
+      puts "★バイト値: #{sprintf('%02X', byte)} 状態:#{$midi_state}" if loop_count <= 2
       
       case $midi_state
       when 0
         if byte == 0x90 || byte == 0x80
           $status_byte = byte
           $midi_state = 1
+          puts "★ステータス受信: #{sprintf('%02X', byte)}" if loop_count <= 2
         end
       when 1
         $note_byte = byte
         $midi_state = 2
+        puts "★ノート受信: #{byte}" if loop_count <= 2
       when 2
         if $status_byte == 0x90
+          puts "★Note ON: ノート#{$note_byte} ベロシティ#{byte}" if loop_count <= 2
           update_light($note_byte, byte, true)
         elsif $status_byte == 0x80
+          puts "★Note OFF: ノート#{$note_byte}" if loop_count <= 2
           update_light($note_byte, 0, false)
         end
         $midi_state = 0
