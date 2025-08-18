@@ -24,12 +24,16 @@ puts "6. グローバル変数初期化完了"
 sleep_ms(1000)
 puts "7. スリープ完了"
 
-#$midi_uart.write([0xC0, 83].map(&:chr).join)
-# 実績のある形式で書き込み
-program_change = [0xC0, 83].map(&:chr).join
-puts "8-1. プログラムチェンジデータ生成完了"
+# 手動で安全にバイト変換
+puts "8-1. 手動バイト変換開始"
+byte1 = 0xC0.chr
+puts "8-2. 1バイト目変換完了"
+byte2 = 83.chr  
+puts "8-3. 2バイト目変換完了"
+program_change = byte1 + byte2
+puts "8-4. データ結合完了"
 $midi_uart.write(program_change)
-puts "8-2. MIDI音色設定送信完了"
+puts "8-5. MIDI音色設定送信完了"
 
 sleep_ms(100)
 puts "9. 音色設定後スリープ完了"
