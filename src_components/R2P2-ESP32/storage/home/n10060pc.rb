@@ -154,7 +154,7 @@ loop do
   puts "24. フェード処理完了" if loop_count == 1
   
   puts "25. LED表示開始" if loop_count == 1
-  $led.show(build_rgb_array)
+  $led.show_hex(*$colors)
   puts "26. LED表示完了" if loop_count == 1
   
   puts "27. スリープ開始" if loop_count == 1
