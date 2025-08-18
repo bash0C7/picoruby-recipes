@@ -1,128 +1,102 @@
-# ATOM Matrix外付けLED光源ペンライト syn_pcでMIDI叩いたら色を変える
-
 require 'uart'
 require 'ws2812'
 
-MIDI_TX = 23  # J4のG23ピン
-MIDI_RX = 33  # J4のG33ピン  
+$pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
+$midi_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
+$led = WS2812.new(RMTDriver.new(22))
+$colors = Array.new(60, 0)
+$midi_state = 0
+$status_byte = 0
+$note_byte = 0
 
-puts "MIDI Through + LED + Chiff Lead + Wide Light"
-
-pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
-midi_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: MIDI_TX, rxd_pin: MIDI_RX)
-
-LED_PIN = 22
-LED_COUNT = 60
-# LED設定
-led = WS2812.new(RMTDriver.new(LED_PIN))
-colors = Array.new(LED_COUNT) { [0, 0, 0] }
-
-# MIDI変数（シンプル化）
-note_leds = Array.new(LED_COUNT, 0)
-midi_bytes = []
-
-# 音域定義
-NOTE_MIN = 36
-NOTE_MAX = 84
-
-# 起動時にChiff Lead音色に設定
+# 音色設定
 sleep_ms(1000)
-program_change = [0xC0, 83].map(&:chr).join
-midi_uart.write(program_change)
-puts "音色設定: Chiff Lead"
+$midi_uart.write([0xC0, 83].map(&:chr).join)
 sleep_ms(100)
 
+def update_light(note, velocity, is_note_on)
+  return if note < 36 || note > 84
+  
+  pos = (note - 36) * 59 / 48
+  return if pos < 0 || pos >= 60
+  
+  if is_note_on
+    # Note On処理
+    color_type = ((note - 36) / 12) % 6
+    brightness = velocity * 2
+    brightness = 255 if brightness > 255
+    
+    case color_type
+    when 0; $colors[pos] = brightness << 16
+    when 1; $colors[pos] = brightness << 8
+    when 2; $colors[pos] = brightness
+    when 3; $colors[pos] = (brightness << 16) | (brightness << 8)
+    when 4; $colors[pos] = (brightness << 8) | brightness
+    when 5; $colors[pos] = (brightness << 16) | brightness
+    end
+    
+    # 隣接位置
+    $colors[pos - 1] = $colors[pos] / 3 if pos > 0
+    $colors[pos + 1] = $colors[pos] / 3 if pos < 59
+  else
+    # Note Off処理（即座に消灯）
+    $colors[pos] = 0
+    $colors[pos - 1] = 0 if pos > 0
+    $colors[pos + 1] = 0 if pos < 59
+  end
+end
+
+def fade_lights
+  i = 0
+  while i < 60
+    $colors[i] = $colors[i] * 97 / 100 if $colors[i] > 5
+    $colors[i] = 0 if $colors[i] <= 5
+    i += 1
+  end
+end
+
 loop do
-  # MIDI受信・転送
-  data = pc_uart.read
+  data = $pc_uart.read
+  
   if data && data.length > 0
-    midi_uart.write(data)
+    $midi_uart.write(data)
     
     data.each_byte do |byte|
-      midi_bytes.push(byte)
-      
-      # 3バイト溜まったらNote Onチェック
-      if midi_bytes.length >= 3
-        status = midi_bytes[-3]
-        note = midi_bytes[-2]
-        velocity = midi_bytes[-1]
-        
-        if status >= 0x90 && status <= 0x9F && velocity > 0
-          if note >= NOTE_MIN && note <= NOTE_MAX
-            center_pos = ((note - NOTE_MIN) * (LED_COUNT - 1)) / (NOTE_MAX - NOTE_MIN)
-            
-            # 色計算（オクターブベース）
-            octave = (note - NOTE_MIN) / 12
-            
-            # 中心から前後5つずつ光らせる（直接ループ）
-            start_pos = center_pos - 5
-            start_pos = 0 if start_pos < 0
-            end_pos = center_pos + 5
-            end_pos = LED_COUNT - 1 if end_pos >= LED_COUNT
-            
-            i = start_pos
-            while i <= end_pos
-              distance = (i - center_pos).abs
-              if distance <= 5
-                # 明度計算（中心255 → 端51）
-                brightness = 255 - (distance * 41)
-                
-                # 色計算（その都度）
-                r = 0
-                g = 0
-                b = 0
-                case octave % 6
-                when 0  # 赤
-                  r = brightness
-                when 1  # 黄
-                  r = brightness
-                  g = brightness / 2
-                when 2  # 緑
-                  g = brightness
-                when 3  # シアン
-                  g = brightness / 2
-                  b = brightness
-                when 4  # 青
-                  b = brightness
-                when 5  # マゼンタ
-                  r = brightness / 2
-                  b = brightness
-                end
-                
-                colors[i] = [r, g, b]
-                note_leds[i] = brightness
-              end
-              i += 1
-            end
-            
-            puts "Note: #{note}, LED: #{center_pos}, Oct: #{octave}"
-          end
+      case $midi_state
+      when 0  # ステータス待ち
+        if byte == 0x90 || byte == 0x80
+          $status_byte = byte
+          $midi_state = 1
         end
-        
-        # バッファ制限
-        if midi_bytes.length > 10
-          midi_bytes.shift
+      when 1  # ノート番号
+        $note_byte = byte
+        $midi_state = 2
+      when 2  # ベロシティ
+        if $status_byte == 0x90
+          # Note On
+          update_light($note_byte, byte, true)
+        elsif $status_byte == 0x80
+          # Note Off
+          update_light($note_byte, 0, false)
         end
+        $midi_state = 0
       end
     end
   end
   
-  # LED更新と減衰
+  fade_lights
+  
+  # RGB出力
+  rgb_array = []
   i = 0
-  while i < LED_COUNT
-    if note_leds[i] > 0
-      note_leds[i] -= 3
-      note_leds[i] = 0 if note_leds[i] < 0
-      
-      if note_leds[i] == 0
-        colors[i] = [0, 0, 0]
-      end
-    else
-      colors[i] = [0, 0, 0]
-    end
+  while i < 60
+    c = $colors[i]
+    rgb_array.push((c >> 16) & 0xFF)
+    rgb_array.push((c >> 8) & 0xFF)
+    rgb_array.push(c & 0xFF)
     i += 1
   end
   
-  led.show_rgb(*colors)
-  sleep_ms(15)
+  $led.show(rgb_array)
+  sleep_ms(25)
 end
