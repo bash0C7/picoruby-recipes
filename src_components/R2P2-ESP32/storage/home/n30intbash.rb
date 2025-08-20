@@ -1,5 +1,5 @@
 # ATOM Matrix Internal 5x5 LED Control to GPIO 27 
-# bashアイコンパターン - RGB直接指定による高精度表現 + 3軸加速度応答
+# bashアイコン表示 - RGB直接指定による高精度表現 + 3軸加速度応答
 
 require 'ws2812'
 require 'mpu6886'
