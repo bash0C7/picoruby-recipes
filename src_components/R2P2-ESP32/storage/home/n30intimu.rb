@@ -4,6 +4,7 @@
 require 'ws2812'
 require 'mpu6886'
 
+COLS = 5
 pattern_rows = [
   0b00000,
   0b00100,
@@ -13,13 +14,6 @@ pattern_rows = [
 ]
 
 ROWS = pattern_rows.length
-cols = 0
-temp = pattern_rows[0]
-while temp > 0
-  cols += 1
-  temp >>= 1
-end
-COLS = cols
 LEDS = ROWS * COLS
 
 mpu = MPU6886.new(I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21))
