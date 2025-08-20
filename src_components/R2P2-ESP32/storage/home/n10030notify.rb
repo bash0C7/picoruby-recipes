@@ -4,9 +4,11 @@
 require 'ws2812'
 require 'uart'
 
+uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
+
 # LED設定
 led_pin = 22
-led_count = 30
+led_count = 60
 
 # WS2812初期化
 led = WS2812.new(RMTDriver.new(led_pin))
@@ -29,42 +31,35 @@ loop do
     
     if input == "r"
       uart.puts "R"
-      # 簡単な赤点灯
-      (0...led_count).each { |i| 
-        colors[i][0] = 100
-        colors[i][1] = 20
-        colors[i][2] = 0
-      }
+      # 実例パターン：配列全体を再代入
+      led_count.times do |i|
+        colors[i] = [100, 20, 0]  # 赤色
+      end
       led.show_rgb(*colors)
       
     elsif input == "g"
       uart.puts "G" 
-      # 簡単な緑点灯
-      (0...led_count).each { |i| 
-        colors[i][0] = 20
-        colors[i][1] = 100
-        colors[i][2] = 0
-      }
+      # 実例パターン：配列全体を再代入
+      led_count.times do |i|
+        colors[i] = [20, 100, 0]  # 緑色
+      end
       led.show_rgb(*colors)
       
     elsif input == "b"
       uart.puts "B"
-      # 簡単な青点灯
-      (0...led_count).each { |i| 
-        colors[i][0] = 0
-        colors[i][1] = 20
-        colors[i][2] = 100
-      }
+      # 実例パターン：配列全体を再代入
+      led_count.times do |i|
+        colors[i] = [0, 20, 100]  # 青色
+      end
       led.show_rgb(*colors)
     end
     sleep_ms(3000)
   end
-  # 消灯
-  (0...led_count).each { |i| 
-    colors[i][0] = 0
-    colors[i][1] = 0
-    colors[i][2] = 0
-  }
+  
+  # 消灯 - 実例パターン：配列全体を再代入
+  led_count.times do |i|
+    colors[i] = [0, 0, 0]  # 完全消灯
+  end
   led.show_rgb(*colors)
   
   sleep_ms(100)
