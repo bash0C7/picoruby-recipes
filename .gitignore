@@ -68,3 +68,4 @@ ehthumbs.db
 Thumbs.db
 
 /components/
+.claude/
