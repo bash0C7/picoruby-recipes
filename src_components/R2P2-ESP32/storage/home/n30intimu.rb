@@ -1,8 +1,9 @@
 # ATOM Matrix Internal 5x5 LED Control to GPIO 27 
-# Ruby Gemstone Demo - 振動応答型LEDパターンシミュレーション (メモリ最適化版)
+# Ruby Gemstone Demo - 振動応答型LEDパターンシミュレーション (ボタンキャリブレーション版)
 
 require 'ws2812'
 require 'mpu6886'
+require 'gpio'
 
 COLS = 5
 pattern_rows = [
@@ -15,6 +16,12 @@ pattern_rows = [
 
 ROWS = pattern_rows.length
 LEDS = ROWS * COLS
+
+HIGH = 1
+LOW = 0
+
+# GPIO 39 ボタン初期化
+button = GPIO.new(39, GPIO::IN)
 
 mpu = MPU6886.new(I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21))
 mpu.accel_range = MPU6886::ACCEL_RANGE_4G
@@ -45,25 +52,48 @@ leds = Array.new(LEDS) { [0, 0, 0] }
 
 puts "#{ROWS}x#{COLS} (#{LEDS} LEDs) Pattern: #{pattern}"
 
-sx = sy = 0
-5.times do |i|
-  a = mpu.acceleration
-  sx += (a[:x] * 100).to_i
-  sy += (a[:y] * 100).to_i
-  puts "#{i+1}: #{(a[:x] * 100).to_i}, #{(a[:y] * 100).to_i}"
-  sleep_ms 200
+# キャリブレーション処理メソッド
+def calibrate_sensor(mpu)
+  sx = sy = 0
+  5.times do |i|
+    a = mpu.acceleration
+    sx += (a[:x] * 100).to_i
+    sy += (a[:y] * 100).to_i
+    puts "#{i+1}: #{(a[:x] * 100).to_i}, #{(a[:y] * 100).to_i}"
+    sleep_ms 200
+  end
+  
+  nx = sx / 5
+  ny = sy / 5
+  return nx, ny
 end
 
-NX = sx / 5
-NY = sy / 5
-puts "Neutral: #{NX}, #{NY}"
+# 初回キャリブレーション実行
+nx, ny = calibrate_sensor(mpu)
+puts "Initial Neutral: #{nx}, #{ny}"
 
 px = py = 0
+last_button = HIGH
+button_wait = 0
 
 loop do
+  current_button = button.read
+  
+  # ボタン押下検出（HIGHからLOWへの変化）
+  if last_button == HIGH && current_button == LOW && button_wait == 0
+    puts "Button: Re-calibrating..."
+    nx, ny = calibrate_sensor(mpu)
+    puts "Updated Neutral: #{nx}, #{ny}"
+    button_wait = 4  # 4回ループ待機（200msデバウンス）
+  end
+  
+  last_button = current_button
+  button_wait -= 1 if button_wait > 0
+  
+  # メインLEDパターン処理
   a = mpu.acceleration
-  rx = (a[:x] * 100).to_i - NX
-  ry = (a[:y] * 100).to_i - NY
+  rx = (a[:x] * 100).to_i - nx
+  ry = (a[:y] * 100).to_i - ny
   mi = rx * rx + ry * ry
   
   if mi < 64
