@@ -1,4 +1,5 @@
-# ATOM Matrix外付けLED光源ペンライト + 加速度センサー連動
+# IMU連動MIDIシンセサイザーデモ - 3軸加速度でマルチ楽器演奏
+# 外付け60 LED(J5ポートGPIO 22) + MPU6886センサー + MIDI(GPIO 23/33) + Unit ASR(Grove GPIO 26/32)
 require 'unitasr'
 require 'ws2812'
 require 'uart'
@@ -6,7 +7,7 @@ require 'mpu6886'
 
 # LED設定
 led_pin = 22
-led_count = 90
+led_count = 60
 led = WS2812.new(RMTDriver.new(led_pin))
 colors = Array.new(led_count) { [200, 100, 0] }
 

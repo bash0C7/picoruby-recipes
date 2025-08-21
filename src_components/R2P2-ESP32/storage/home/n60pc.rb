@@ -1,3 +1,5 @@
+# MIDIシンセサイザーデモ - PC→LEDビジュアライザー
+# 外付け60 LED(J5ポートGPIO 22) + MIDI入出力(USB,GPIO 23/33)
 require 'uart'
 require 'ws2812'
 

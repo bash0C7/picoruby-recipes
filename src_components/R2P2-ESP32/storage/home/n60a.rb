@@ -1,10 +1,10 @@
-
-# ATOM Matrix外付けLED光源ペンライト
+# ペンライトデモ - 音声認識によるオレンジ輝度制御
+# 外付け60 LED(J5ポートGPIO 22) + Unit ASR音声認識(Grove GPIO 26/32)
 require 'unitasr'
 require 'ws2812'
 
 led_pin = 22
-led_count = 90
+led_count = 60
 
 led = WS2812.new(RMTDriver.new(led_pin))
 

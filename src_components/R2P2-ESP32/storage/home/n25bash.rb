@@ -1,5 +1,5 @@
-# ATOM Matrix Internal 5x5 LED Control to GPIO 27 
-# bashアイコン表示 - RGB直接指定による高精度表現 + 3軸加速度応答
+# bashアイコン表示デモ - 3軸加速度でRGB色変化
+# 内蔵5x5 LED(GPIO 27) + MPU6886センサー
 
 require 'ws2812'
 require 'mpu6886'

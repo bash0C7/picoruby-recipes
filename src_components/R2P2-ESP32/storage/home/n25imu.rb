@@ -1,5 +1,5 @@
-# ATOM Matrix Internal 5x5 LED Control to GPIO 27 
-# Ruby Gemstone Demo - 振動応答型LEDパターンシミュレーション (ボタンキャリブレーション版)
+# Ruby Gemstoneデモ - 振動応答LEDパターンシミュレーション
+# 内蔵5x5 LED(GPIO 27) + MPU6886センサー + ボタン(GPIO 39)
 
 require 'ws2812'
 require 'mpu6886'

@@ -1,13 +1,12 @@
-
-# ATOM Matrix外付けLED光源ペンライト
-# WS2812 LED strip connected to J5 port (G22)
+# ペンライトデモ - VL53L0X距離センサーによる輝度制御
+# 外付け60 LED(J5ポートGPIO 22) + VL53L0X測距センサー(I2C GPIO 21/25)
 
 require 'ws2812'
 require 'i2c'
 require 'vl53l0x'
 
 led_pin = 22
-led_count = 90
+led_count = 60
 
 led = WS2812.new(RMTDriver.new(led_pin))
 

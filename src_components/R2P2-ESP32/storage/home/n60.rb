@@ -13,7 +13,7 @@ puts "ATOM Matrix Internal LED Starting..."
 
 # LED設定
 led_pin = 22
-led_count = 90
+led_count = 60
 
 # WS2812初期化
 led = WS2812.new(RMTDriver.new(led_pin))

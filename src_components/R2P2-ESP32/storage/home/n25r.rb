@@ -1,6 +1,5 @@
-# ATOM Matrix Internal 5x5 LED Control - random Light
-# Built-in WS2812 LEDs connected to GPIO 27
-# Using picoruby-ws2812 gem
+# ランダムカラー表示デモ - 時刻ベース疑似乱数色変化
+# 内蔵5x5 LED(GPIO 27) + 時刻種子カラー生成
 
 require 'ws2812'
 
