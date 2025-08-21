@@ -6,20 +6,8 @@
 require 'uart'
 
 def flash_notification(duration: 3)
-  # 画面を最大明度にする（F2キー連打）
-  system("osascript -e 'tell application \"System Events\" to repeat 16 times
-    key code 120
-    delay 0.01
-  end repeat'")
-  
-  sleep(duration)
-  
-  # 画面を暗くする（F1キー連打）
-  system("osascript -e 'tell application \"System Events\" to repeat 10 times
-    key code 122
-    delay 0.01
-  end repeat'")
-  
+  # Mac通知を表示
+  system("osascript -e 'display notification \"Claude Code実行完了\" with title \"Claude Code Hook\" sound name \"Glass\"'")
 end
 
 # メイン処理
