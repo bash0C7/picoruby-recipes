@@ -1,6 +1,7 @@
+puts "0"
 require 'ws2812'
+puts "00"
 require 'mpu6886'
-require 'gpio'
 
 puts "1: start"
 
@@ -26,9 +27,19 @@ CHARS = {
 puts "2: data"
 
 button = GPIO.new(39, GPIO::IN)
-mpu = MPU6886.new(I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21))
-mpu.accel_range = MPU6886::ACCEL_RANGE_4G
+puts "2.1: btn"
+sleep_ms 100
+
 led = WS2812.new(RMTDriver.new(27))
+puts "2.2: led"
+sleep_ms 200
+
+mpu = MPU6886.new(I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21))
+puts "2.3: i2c"
+sleep_ms 100
+
+mpu.accel_range = MPU6886::ACCEL_RANGE_4G
+puts "2.4: mpu"
 
 leds = [0] * LEDS
 
@@ -113,5 +124,4 @@ loop do
       sleep_ms 50
     end
   end
-  puts "9: done"
 end
