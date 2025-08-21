@@ -6,8 +6,11 @@
 require 'uart'
 
 def flash_notification(duration: 3)
-  # Mac通知を表示
-  system("osascript -e 'display notification \"Claude Code実行完了\" with title \"Claude Code Hook\" sound name \"Glass\"'")
+  # アラートダイアログ（確実に表示される）
+  system("osascript -e 'display dialog \"Claude Code実行完了\" with title \"Claude Code Hook\" buttons {\"OK\"} default button \"OK\" giving up after 2'")
+  
+  # システム音
+  system("afplay /System/Library/Sounds/Glass.aiff")
 end
 
 # メイン処理
