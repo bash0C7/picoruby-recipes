@@ -21,15 +21,21 @@ This project showcases how to use PicoRuby with ESP32 hardware, featuring real-w
 - Ruby scripts for sensor demos and LED control
 
 **Key Components**:
+
+*ESP32/ATOM Matrix (PicoRuby):*
 - `asr.rb`: Unit ASR voice command recognition with LED feedback
+- `asr_c.rb`: Object-oriented Unit ASR wrapper class with command handlers
 - `led_int.rb`: Internal 5x5 LED matrix control for basic patterns
 - `led_ext.rb`: External WS2812 LED strip control with motion response
-- `led_j5_60.rb`: 60-LED strip control via expansion board
+- `led_j3_25.rb`: 25-LED strip control via J3 expansion port
+- `led_j5_60.rb`: 60-LED strip control via J5 expansion board
 - `syn.rb`: MIDI synthesizer with multi-channel chord progression
 - `syn_atom.rb`: MIDI visualization on LED matrix with PC bridge
-- `syn_pc.rb`: PC-side MIDI bridge for real-time music visualization
 - `tof.rb`: VL53L0X distance sensor with range categorization
 - `imu.rb`: MPU6886 IMU sensor data display and monitoring
+
+*PC Side (CRuby):*
+- `notify_caller.rb`: Claude Code hook notification system for development workflow
 
 ## Quick Start
 
@@ -58,17 +64,22 @@ rake check_env     # Verify environment setup
 ```
 picoruby-recipes/
 ├── src_components/              # Source components (tracked in git)
-│   └── R2P2-ESP32/
-│       └── storage/home/        # Ruby application files
-│           ├── asr.rb          # Voice recognition demo
-│           ├── led_int.rb      # Internal LED matrix
-│           ├── led_ext.rb      # External LED strip
-│           ├── led_j5_60.rb    # 60-LED strip control
-│           ├── syn.rb          # MIDI synthesizer
-│           ├── syn_atom.rb     # MIDI LED visualization
-│           ├── syn_pc.rb       # PC MIDI bridge
-│           ├── tof.rb          # Distance sensor
-│           └── imu.rb          # IMU sensor data
+│   ├── R2P2-ESP32/
+│   │   └── storage/home/        # Ruby application files for ESP32
+│   │       ├── asr.rb          # Voice recognition demo
+│   │       ├── asr_c.rb        # OOP Unit ASR wrapper class
+│   │       ├── led_int.rb      # Internal 5x5 LED matrix
+│   │       ├── led_ext.rb      # External LED strip (Grove)
+│   │       ├── led_j3_25.rb    # 25-LED strip (J3 port)
+│   │       ├── led_j5_60.rb    # 60-LED strip (J5 port)
+│   │       ├── syn.rb          # MIDI synthesizer
+│   │       ├── syn_atom.rb     # MIDI LED visualization
+│   │       ├── tof.rb          # Distance sensor
+│   │       └── imu.rb          # IMU sensor data
+│   └── pc/                     # PC-side CRuby applications
+│       ├── notify_caller.rb    # Claude Code hook notifier
+│       ├── Gemfile            # Ruby dependencies
+│       └── Gemfile.lock       # Locked versions
 ├── components/                  # Build directory (auto-generated)
 ├── build_config/                # Build configuration
 │   └── xtensa-esp.rb           # Ruby gem configuration
@@ -77,17 +88,20 @@ picoruby-recipes/
 
 ## Code Examples
 
-**Voice Recognition** (`asr.rb`):
-Unit ASR integration for voice command detection with visual LED feedback and Grove UART communication.
+**Voice Recognition** (`asr.rb`, `asr_c.rb`):
+Unit ASR integration for voice command detection with visual LED feedback and Grove UART communication. Features both procedural (`asr.rb`) and object-oriented (`asr_c.rb`) implementations with command handler patterns.
 
-**LED Control** (`led_int.rb`, `led_ext.rb`, `led_j5_60.rb`):
-WS2812 LED control ranging from internal 5x5 matrix to external 60-LED strips with motion-responsive patterns.
+**LED Control** (`led_int.rb`, `led_ext.rb`, `led_j3_25.rb`, `led_j5_60.rb`):
+WS2812 LED control ranging from internal 5x5 matrix to external LED strips (15-60 LEDs) with motion-responsive patterns using different expansion ports.
 
 **MIDI Synthesis** (`syn.rb`, `syn_atom.rb`):
 Complete MIDI implementation featuring multi-channel synthesis, chord progressions, and real-time LED music visualization.
 
 **Sensor Integration** (`tof.rb`, `imu.rb`):
 Distance measurement with VL53L0X and IMU data monitoring with MPU6886, showcasing I2C device multiplexing.
+
+**Development Tools** (`notify_caller.rb`):
+PC-side CRuby utility for Claude Code integration, providing visual notifications and serial communication with ATOM Matrix during development workflow.
 
 ## Development Notes
 
@@ -113,6 +127,11 @@ Tested with ATOM Matrix ESP32 devices featuring:
 - MIDI Unit (SAM2695) synthesizer module  
 - VL53L0X ToF distance sensor (I2C address 0x29)
 - External WS2812 LED strips (15-60 LEDs)
+
+**Expansion ports**:
+- **Grove connector** (GPIO 26, 32): UART/I2C communication
+- **J3 port** (GPIO 25, 21): I2C devices (shares bus with MPU6886)
+- **J5 port** (GPIO 19, 22): Additional GPIO/UART for LED strips
 
 ## License
 
