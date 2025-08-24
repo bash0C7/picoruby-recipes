@@ -73,15 +73,12 @@ picoruby-recipes/
 │   │       ├── led_j5_60.rb    # 60-LED strip via J5 port (GPIO 22)
 │   │       ├── syn.rb          # MIDI synthesizer (SAM2695)
 │   │       ├── tof.rb          # VL53L0X distance sensor
-│   │       ├── imu.rb          # MPU6886 IMU sensor
-│   │       └── m.md            # File specifications (Japanese)
+│   │       └── imu.rb          # MPU6886 IMU sensor
 │   └── pc/                     # PC-side CRuby applications
 │       ├── notify_caller.rb    # Claude Code hook notifier
 │       ├── Gemfile            # Ruby dependencies
 │       └── Gemfile.lock       # Locked versions
 ├── components/                  # Build directory (auto-generated)
-├── build_config/                # Build configuration
-│   └── xtensa-esp.rb           # Ruby gem configuration
 └── Rakefile                    # Build automation
 ```
 
@@ -126,7 +123,7 @@ bundle install  # Install uart and unimidi gems
 - **LED control**: RMT peripheral for precise WS2812 timing with brightness safety limits
 - **MIDI processing**: Binary message handling using SAM2695 synthesizer chip
 - **GPIO mapping**: Different expansion ports (Grove, J3, J5) for various LED configurations
-- All Ruby gems configured in `build_config/xtensa-esp.rb`
+- All Ruby gems configured in `src_components/R2P2-ESP32/components/picoruby-esp32/picoruby/build_config/xtensa-esp.rb`
 
 ## Hardware Support
 
