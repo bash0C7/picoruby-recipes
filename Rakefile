@@ -9,7 +9,7 @@ ESP32 + PicoRuby（R2P2-ESP32）環境での統合開発を支援。
 Arduino C++とRuby（PicoRuby）のハイブリッド構成によるマイクロコントローラー開発。
 
 【主要機能】
-- ESP-IDF環境の自動セットアップ（Homebrew OpenSSL対応）
+- ESP-IDF環境の自動セットアップ（Homebrew OpenfSSL対応）
 - R2P2-ESP32（PicoRuby）との統合ビルド
 - Arduino C++とRubyのハイブリッド開発サポート
 - 自動的なソースコンポーネント管理（src_components/ → components/）

@@ -19,7 +19,6 @@ MRuby::CrossBuild.new("esp32") do |conf|
   conf.cc.defines << "USE_FAT_FLASH_DISK"
   conf.cc.defines << "NDEBUG"
 
-  conf.gembox 'peripherals'
   conf.gembox 'r2p2'
   conf.gem core: "picoruby-machine"
   conf.gem core: "picoruby-picorubyvm"
@@ -32,9 +31,21 @@ MRuby::CrossBuild.new("esp32") do |conf|
   conf.gem core: "picoruby-picoline"
   conf.gem core: "picoruby-base64"
   conf.gem core: "picoruby-mbedtls"
+
+  # peripherals
+  conf.gem core: 'picoruby-gpio'
+  conf.gem core: 'picoruby-i2c'
+  conf.gem core: 'picoruby-spi'
+  conf.gem core: 'picoruby-adc'
+  conf.gem core: 'picoruby-uart'
+  conf.gem core: 'picoruby-pwm'
+
+  #=============================
   conf.gem github: 'bash0C7/picoruby-mpu6886', branch: 'main'
   conf.gem github: 'ksbmyk/picoruby-ws2812', branch: 'main'
   conf.gem github: 'bash0C7/picoruby-vl53l0x', branch: 'main'
   conf.gem github: 'bash0C7/picoruby-unitasr', branch: 'main'
+  #=============================
+
   conf.picoruby(alloc_libc: false)
 end
