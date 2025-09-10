@@ -47,5 +47,9 @@ MRuby::CrossBuild.new("esp32") do |conf|
   conf.gem github: 'bash0C7/picoruby-unitasr', branch: 'main'
   #=============================
 
+
+  conf.gem core: 'picoruby-irq'
+
+
   conf.picoruby(alloc_libc: false)
 end
