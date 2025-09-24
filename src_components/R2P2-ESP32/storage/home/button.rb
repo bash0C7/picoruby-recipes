@@ -11,11 +11,16 @@ class Button
   end 
 
   def initialize(pin)
+#    @gpio = GPIO.new(pin, GPIO::IN|GPIO::PULL_UP)
     @gpio = GPIO.new(pin, GPIO::IN)
     @on_press_callback = Proc.new {|press_count| }
+    @on_release_callback = Proc.new {|press_count| }
     @press_count = 0
 
-    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE) do |peripheral, event_type|
+#    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 50, capture: "My IRQ") do |peripheral, event_type, capture|
+#    @irq_instance = @gpio.irq(GPIO::EDGE_FALL, debounce: 50, capture: "My IRQ") do |peripheral, event_type, capture|
+    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE) do |peripheral, event_type, capture|
+      puts "#{capture} -- Button pressed! Event: #{event_type}"
       case event_type
       when GPIO::EDGE_FALL
         puts "fall"
@@ -23,6 +28,7 @@ class Button
         @on_press_callback.call @press_count
       when GPIO::EDGE_RISE  
         puts "rise"
+        @on_release_callback.call @press_count
       end
     end
   end
@@ -30,6 +36,11 @@ class Button
   def on_press(&block)
     @on_press_callback = block
   end
+
+  def on_release(&block)
+    @on_release_callback = block
+  end
+
 end
 
 # オレンジ色設定（安全な輝度30）
@@ -40,15 +51,16 @@ orange_b = 0
 button = Button.new(39)
 button.on_press do |press_count|
   puts "call on press"
-  if press_count % 2 == 1
-    orange_r = 250
-    orange_g = 130
-    orange_b = 0
-  else
-    orange_r = 30
-    orange_g = 15
-    orange_b = 0
-  end
+  orange_r = 250
+  orange_g = 130
+  orange_b = 0
+end
+
+button.on_release do |press_count|
+  puts "call on release"
+  orange_r = 30
+  orange_g = 15
+  orange_b = 0
 end
 
 # LED設定
