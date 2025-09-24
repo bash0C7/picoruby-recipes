@@ -12,13 +12,15 @@ class Button
 
   def initialize(pin)
     @gpio = GPIO.new(pin, GPIO::IN)
-    @on_press_callback = Proc.new {}
+    @on_press_callback = Proc.new {|press_count| }
+    @press_count = 0
 
     @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE) do |peripheral, event_type|
       case event_type
       when GPIO::EDGE_FALL
         puts "fall"
-        @on_press_callback.call
+        @press_count += 1
+        @on_press_callback.call @press_count
       when GPIO::EDGE_RISE  
         puts "rise"
       end
@@ -36,11 +38,17 @@ orange_g = 15
 orange_b = 0
 
 button = Button.new(39)
-button.on_press do
+button.on_press do |press_count|
   puts "call on press"
-  orange_r = 15
-  orange_g = 30
-  orange_b = 0
+  if press_count % 2 == 1
+    orange_r = 250
+    orange_g = 130
+    orange_b = 0
+  else
+    orange_r = 30
+    orange_g = 15
+    orange_b = 0
+  end
 end
 
 # LED設定
@@ -62,18 +70,15 @@ puts "LED initialized (GPIO 27, 25 LEDs)"
 # 連続点灯ループ
 loop do
   count = IRQ.process
-  puts count
-  puts button.irq_instance.enabled?  # => true
+  #puts count
+  #puts button.irq_instance.enabled?  # => true
   # 毎回色を設定してLED更新
   led_count.times do |i|
     colors[i] = [orange_r, orange_g, orange_b]
   end
-  orange_r = 30
-  orange_g = 15
-  orange_b = 0
   
   # LED表示更新
   led.show_rgb(*colors)
   
-  sleep_ms 100  # 100ms間隔で更新
+  sleep_ms 50  # 100ms間隔で更新
 end
