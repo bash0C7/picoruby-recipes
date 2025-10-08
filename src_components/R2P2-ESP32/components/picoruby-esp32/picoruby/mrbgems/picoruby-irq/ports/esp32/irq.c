@@ -13,16 +13,17 @@
 
 /* 最大ハンドラ数とキューサイズ */
 #define MAX_IRQ_HANDLERS 16
-#define IRQ_EVENT_QUEUE_SIZE 32
+#define IRQ_EVENT_QUEUE_SIZE (1<<5)
 
 /* IRQハンドラ情報 */
 typedef struct {
   int pin;                    // GPIO番号
-  int irq_id;                // IRQ ID（1から始まる）
-  bool enabled;              // 有効フラグ
-  uint32_t debounce_ms;      // デバウンス時間（ミリ秒）
-  uint64_t last_event_time;  // 最後のイベント時刻
-} irq_handler_t;
+  uint32_t event_mask;        // イベントマスク
+  bool enabled;               // 有効フラグ
+  uint32_t debounce_ms;       // デバウンス時間（ミリ秒）
+  uint32_t last_event_time;   // 最後のイベント時刻
+  uint32_t last_event_type;   // 最後のイベントタイプ
+} mrb_irq_handler_t;
 
 /* イベントキューのデータ */
 typedef struct {
@@ -31,7 +32,7 @@ typedef struct {
 } irq_event_t;
 
 /* グローバル変数 */
-static irq_handler_t handlers[MAX_IRQ_HANDLERS];
+static mrb_irq_handler_t irq_handlers[MAX_IRQ_HANDLERS];
 static QueueHandle_t event_queue = NULL;
 static int next_irq_id = 1;
 static bool isr_service_installed = false;
@@ -42,49 +43,68 @@ static bool isr_service_installed = false;
  */
 static void IRAM_ATTR gpio_isr_handler(void* arg)
 {
-  irq_handler_t* handler = (irq_handler_t*)arg;
-  
+  mrb_irq_handler_t* handler = (mrb_irq_handler_t*)arg;
+
   // ハンドラが無効な場合は何もしない
   if (!handler || !handler->enabled) {
     return;
   }
-  
-  /* 
+
+  /*
    * esp_timer_get_time(): ESP32のマイクロ秒単位のタイマー取得
    * 1000で割ってミリ秒に変換
    */
-  uint64_t current_time = esp_timer_get_time() / 1000;
-  
-  // デバウンス処理
-  if (handler->debounce_ms > 0) {
-    uint64_t time_diff = current_time - handler->last_event_time;
-    if (time_diff < handler->debounce_ms) {
-      return; // デバウンス期間中なので無視
-    }
-  }
-  
-  handler->last_event_time = current_time;
-  
-  /* 
+  uint32_t current_time = esp_timer_get_time() / 1000;
+
+  /*
    * gpio_get_level(): 指定されたGPIOピンの現在の電気的レベルを取得
    * 戻り値: 0（LOW）または 1（HIGH）
    */
   int gpio_level = gpio_get_level(handler->pin);
-  
-  // 現在のレベルからイベントタイプを決定（シンプル版）
-  int event_type;
+
+  // 現在のレベルからイベントタイプを決定
+  uint32_t events;
   if (gpio_level == 0) {
-    event_type = 4; // EDGE_FALL と仮定
+    events = 4; // EDGE_FALL と仮定
   } else {
-    event_type = 8; // EDGE_RISE と仮定
+    events = 8; // EDGE_RISE と仮定
   }
-  
+
+  // マスクされたイベントかチェック
+  if (!(events & handler->event_mask)) {
+    return;
+  }
+
+  // デバウンス処理
+  if (handler->debounce_ms > 0) {
+    uint32_t time_diff = (current_time - handler->last_event_time) & 0xFFFFFFFF;
+    if (time_diff < handler->debounce_ms &&
+        events == handler->last_event_type) {
+      return; // デバウンス期間中なので無視
+    }
+  }
+
+  // イベント履歴を更新
+  handler->last_event_time = current_time;
+  handler->last_event_type = events;
+
+  // IRQ IDを計算（配列インデックス+1）
+  int irq_id = -1;
+  for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
+    if (&irq_handlers[i] == handler) {
+      irq_id = i + 1;
+      break;
+    }
+  }
+
+  if (irq_id < 0) return;
+
   // イベントをキューに追加
   irq_event_t event = {
-    .irq_id = handler->irq_id,
-    .event_type = event_type
+    .irq_id = irq_id,
+    .event_type = events
   };
-  
+
   /*
    * xQueueSendFromISR(): 割り込みハンドラからFreeRTOSキューにデータを送信
    * 第1引数: キューハンドル
@@ -117,16 +137,23 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
   // 空きスロットを探す
   int slot = -1;
   for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
-    if (!handlers[i].enabled) {
+    if (!irq_handlers[i].enabled) {
       slot = i;
       break;
     }
   }
-  
+
   if (slot < 0) {
     return -1; // 空きスロットなし
   }
-  
+
+  // event_typeをevent_maskに変換
+  uint32_t event_mask = 0;
+  if (event_type & 1) event_mask |= GPIO_INTR_LOW_LEVEL;  // LEVEL_LOW = 1
+  if (event_type & 2) event_mask |= GPIO_INTR_HIGH_LEVEL; // LEVEL_HIGH = 2
+  if (event_type & 4) event_mask |= GPIO_INTR_NEGEDGE;    // EDGE_FALL = 4
+  if (event_type & 8) event_mask |= GPIO_INTR_POSEDGE;    // EDGE_RISE = 8
+
   /*
    * 初回のみFreeRTOSキューとGPIO ISRサービスを初期化
    */
@@ -142,7 +169,7 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
       return -1;
     }
   }
-  
+
   if (!isr_service_installed) {
     /*
      * gpio_install_isr_service(): GPIO割り込みサービスをインストール
@@ -156,7 +183,7 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     }
     isr_service_installed = true;
   }
-  
+
   /*
    * GPIO設定構造体の準備
    * gpio_config_t: GPIOの入出力方向、プルアップ/ダウン、割り込みタイプを設定
@@ -168,7 +195,7 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     .pull_down_en = GPIO_PULLDOWN_DISABLE,           // プルダウン無効
     .intr_type = convert_event_type(event_type)       // 割り込みタイプ
   };
-  
+
   /*
    * gpio_config(): GPIO設定を適用
    * 引数: gpio_config_t構造体のポインタ
@@ -178,14 +205,15 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
   if (ret != ESP_OK) {
     return -1;
   }
-  
+
   // ハンドラ情報を設定
-  handlers[slot].pin = pin;
-  handlers[slot].irq_id = next_irq_id++;
-  handlers[slot].enabled = true;
-  handlers[slot].debounce_ms = debounce_ms;
-  handlers[slot].last_event_time = 0;
-  
+  irq_handlers[slot].pin = pin;
+  irq_handlers[slot].event_mask = event_mask;
+  irq_handlers[slot].enabled = true;
+  irq_handlers[slot].debounce_ms = debounce_ms;
+  irq_handlers[slot].last_event_time = 0;
+  irq_handlers[slot].last_event_type = 0;
+
   /*
    * gpio_isr_handler_add(): 指定GPIOに割り込みハンドラを追加
    * 第1引数: GPIO番号
@@ -193,50 +221,43 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
    * 第3引数: ハンドラに渡される引数（void*）
    * 戻り値: ESP_OK（成功）またはエラーコード
    */
-  ret = gpio_isr_handler_add(pin, gpio_isr_handler, &handlers[slot]);
+  ret = gpio_isr_handler_add(pin, gpio_isr_handler, &irq_handlers[slot]);
   if (ret != ESP_OK) {
-    handlers[slot].enabled = false;
+    irq_handlers[slot].enabled = false;
     return -1;
   }
-  
-  return handlers[slot].irq_id;
+
+  return slot + 1; // 1ベースのIDを返す
 }
 
 /* GPIO IRQの登録を解除する */
 bool IRQ_unregister_gpio(int irq_id)
 {
-  // IRQ IDからハンドラを探す
-  irq_handler_t* handler = NULL;
-  for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
-    if (handlers[i].enabled && handlers[i].irq_id == irq_id) {
-      handler = &handlers[i];
-      break;
-    }
+  int slot = irq_id - 1; // 0ベースのインデックスに変換
+
+  if (slot < 0 || slot >= MAX_IRQ_HANDLERS || !irq_handlers[slot].enabled) {
+    return false; // 無効なIDまたは未登録
   }
-  
-  if (handler == NULL) {
-    return false; // 見つからない
-  }
-  
-  bool prev_state = handler->enabled;
-  
+
+  bool prev_state = irq_handlers[slot].enabled;
+
   /*
    * gpio_isr_handler_remove(): 指定GPIOの割り込みハンドラを削除
    * 引数: GPIO番号
    * 戻り値: ESP_OK（成功）またはエラーコード
    */
-  gpio_isr_handler_remove(handler->pin);
-  
+  gpio_isr_handler_remove(irq_handlers[slot].pin);
+
   /*
    * gpio_set_intr_type(): GPIO割り込みタイプを設定
    * 第1引数: GPIO番号
    * 第2引数: 割り込みタイプ（GPIO_INTR_DISABLEで無効化）
    */
-  gpio_set_intr_type(handler->pin, GPIO_INTR_DISABLE);
-  
+  gpio_set_intr_type(irq_handlers[slot].pin, GPIO_INTR_DISABLE);
+
   // ハンドラをクリア
-  memset(handler, 0, sizeof(irq_handler_t));
-  
+  memset(&irq_handlers[slot], 0, sizeof(mrb_irq_handler_t));
+
   return prev_state;
 }
 
@@ -267,9 +288,9 @@ bool IRQ_peek_event(int *irq_id, int *event_type)
 /* IRQサブシステムを初期化する */
 void IRQ_init(void)
 {
-  // ハンドラ配列をクリア
-  memset(handlers, 0, sizeof(handlers));
+  // データ構造を初期化
+  memset(irq_handlers, 0, sizeof(irq_handlers));
   next_irq_id = 1;
-  
+
   // キューとISRサービスは最初のregister時に初期化（遅延初期化）
 }
