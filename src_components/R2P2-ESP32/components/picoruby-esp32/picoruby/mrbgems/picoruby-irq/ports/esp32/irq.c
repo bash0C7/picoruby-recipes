@@ -115,21 +115,6 @@ static void IRAM_ATTR gpio_isr_handler(void* arg)
   xQueueSendFromISR(event_queue, &event, NULL);
 }
 
-/*
- * PicoRubyのイベントタイプをESP32のGPIO割り込みタイプに変換
- * PicoRubyの定義:
- * LEVEL_LOW = 1, LEVEL_HIGH = 2, EDGE_FALL = 4, EDGE_RISE = 8
- */
-static gpio_int_type_t convert_event_type(int event_type)
-{
-  // 最初に見つかったイベントタイプで設定（シンプル版）
-  if (event_type & 4) return GPIO_INTR_NEGEDGE;   // EDGE_FALL
-  if (event_type & 8) return GPIO_INTR_POSEDGE;   // EDGE_RISE  
-  if (event_type & 1) return GPIO_INTR_LOW_LEVEL; // LEVEL_LOW
-  if (event_type & 2) return GPIO_INTR_HIGH_LEVEL; // LEVEL_HIGH
-  
-  return GPIO_INTR_DISABLE;
-}
 
 /* GPIO IRQを登録する */
 int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
@@ -193,7 +178,7 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     .mode = GPIO_MODE_INPUT,                          // 入力モード
     .pull_up_en = GPIO_PULLUP_DISABLE,               // プルアップ無効
     .pull_down_en = GPIO_PULLDOWN_DISABLE,           // プルダウン無効
-    .intr_type = convert_event_type(event_type)       // 割り込みタイプ
+    .intr_type = GPIO_INTR_DISABLE                    // 割り込み無効（後で個別設定）
   };
 
   /*
@@ -202,6 +187,18 @@ int IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
    * 戻り値: ESP_OK（成功）またはエラーコード
    */
   esp_err_t ret = gpio_config(&io_conf);
+  if (ret != ESP_OK) {
+    return -1;
+  }
+
+  // 割り込みタイプを個別設定
+  gpio_int_type_t intr_type = GPIO_INTR_DISABLE;
+  if (event_type & 4) intr_type = GPIO_INTR_NEGEDGE;   // EDGE_FALL
+  else if (event_type & 8) intr_type = GPIO_INTR_POSEDGE;   // EDGE_RISE
+  else if (event_type & 1) intr_type = GPIO_INTR_LOW_LEVEL; // LEVEL_LOW
+  else if (event_type & 2) intr_type = GPIO_INTR_HIGH_LEVEL; // LEVEL_HIGH
+
+  ret = gpio_set_intr_type(pin, intr_type);
   if (ret != ESP_OK) {
     return -1;
   }
