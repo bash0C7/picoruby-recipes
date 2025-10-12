@@ -13,22 +13,24 @@ class Button
   def initialize(pin)
 #    @gpio = GPIO.new(pin, GPIO::IN|GPIO::PULL_UP)
     @gpio = GPIO.new(pin, GPIO::IN)
-    @on_press_callback = Proc.new {|press_count| }
-    @on_release_callback = Proc.new {|press_count| }
+    @on_press_callback = Proc.new {|count| }
+    @on_release_callback = Proc.new {|count| }
     @press_count = 0
+    @release_count = 0
 
 #    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 50, capture: "My IRQ") do |peripheral, event_type, capture|
 #    @irq_instance = @gpio.irq(GPIO::EDGE_FALL, debounce: 50, capture: "My IRQ") do |peripheral, event_type, capture|
-    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE) do |peripheral, event_type, capture|
-      puts "#{capture} -- Button pressed! Event: #{event_type}"
+    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 500, capture: {pin: pin}) do |peripheral, event_type, capture|
+      puts "#{capture[:pin]} -- Button pressed! Event: #{event_type}"
       case event_type
       when GPIO::EDGE_FALL
         puts "fall"
-        @press_count += 1
+        press_count += 1
         @on_press_callback.call @press_count
       when GPIO::EDGE_RISE  
         puts "rise"
-        @on_release_callback.call @press_count
+        release_count += 1
+        @on_release_callback.call @release_count
       end
     end
   end
@@ -49,7 +51,7 @@ orange_g = 5
 orange_b = 5
 
 button = Button.new(39)
-button.on_press do |press_count|
+button.on_press do |count|
   puts "call on press"
 # 煌びやか色
   orange_r = 250
@@ -57,7 +59,7 @@ button.on_press do |press_count|
   orange_b = 0
 end
 
-button.on_release do |press_count|
+button.on_release do |count|
   puts "call on release"
 # オレンジ色設定（安全な輝度30）
   orange_r = 30
