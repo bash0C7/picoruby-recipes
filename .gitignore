@@ -67,5 +67,8 @@ build-iPhoneSimulator/
 ehthumbs.db
 Thumbs.db
 
+# IDE
+.vscode/
+
 /components/
 .claude/
