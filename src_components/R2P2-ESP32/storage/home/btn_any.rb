@@ -43,14 +43,15 @@ class Button
 
 end
 
-# オレンジ色設定（安全な輝度30）
-orange_r = 30
-orange_g = 15
-orange_b = 0
+# うっすら色
+orange_r = 5
+orange_g = 5
+orange_b = 5
 
 button = Button.new(39)
 button.on_press do |press_count|
   puts "call on press"
+# 煌びやか色
   orange_r = 250
   orange_g = 130
   orange_b = 0
@@ -58,6 +59,7 @@ end
 
 button.on_release do |press_count|
   puts "call on release"
+# オレンジ色設定（安全な輝度30）
   orange_r = 30
   orange_g = 15
   orange_b = 0
