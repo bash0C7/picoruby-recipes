@@ -11,7 +11,6 @@ class Button
   end 
 
   def initialize(pin)
-#    @gpio = GPIO.new(pin, GPIO::IN|GPIO::PULL_UP)
     @gpio = GPIO.new(pin, GPIO::IN)
     @on_press_callback = Proc.new {|count| }
     @on_release_callback = Proc.new {|count| }
@@ -20,18 +19,30 @@ class Button
 
 #    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 50, capture: "My IRQ") do |peripheral, event_type, capture|
 #    @irq_instance = @gpio.irq(GPIO::EDGE_FALL, debounce: 50, capture: "My IRQ") do |peripheral, event_type, capture|
-    @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 500, capture: {pin: pin}) do |peripheral, event_type, capture|
-      puts "#{capture[:pin]} -- Button pressed! Event: #{event_type}"
-      case event_type
-      when GPIO::EDGE_FALL
-        puts "fall"
-        press_count += 1
-        @on_press_callback.call @press_count
-      when GPIO::EDGE_RISE  
-        puts "rise"
-        release_count += 1
-        @on_release_callback.call @release_count
+    begin
+      @irq_instance = @gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 500, capture: {pin: pin}) do |peripheral, event_type, capture|
+        puts "=======start=========="
+        puts "#{capture[:pin]} -- Button pressed! Event: #{event_type}"
+        case event_type
+        when GPIO::EDGE_FALL
+          puts "fall!"
+          puts @press_count
+          @press_count += 1
+          puts "counted"
+          @on_press_callback.call @press_count
+          puts @press_count
+        when GPIO::EDGE_RISE  
+          puts "rise!"
+          puts @release_count
+          @release_count += 1
+          puts "counted"
+          @on_release_callback.call @release_count
+          puts @release_count
+        end
+        puts "=======end=========="
       end
+    rescue => e
+      puts e.message
     end
   end
   

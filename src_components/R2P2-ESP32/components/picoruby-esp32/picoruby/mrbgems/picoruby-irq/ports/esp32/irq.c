@@ -1,28 +1,3 @@
-/*
- * ESP32 GPIO IRQ Implementation
- * 
- * ⚠️ CRITICAL HARDWARE LIMITATIONS ⚠️
- * 
- * ESP32 has known hardware bugs with GPIO edge-triggered interrupts.
- * See: https://docs.espressif.com/projects/esp-chip-errata/en/latest/esp32/03-errata-description/esp32/gpio-edge-interrupts.html
- * 
- * Known Issues:
- * 1. Only ONE edge-triggered interrupt per GPIO group (GPIO0-31, GPIO32-39, RTC GPIO0-17)
- * 2. Edge interrupts may be lost during register operations
- * 3. Fast transitions (<2.5µs) may cause multiple ISR triggers or missed edges
- * 
- * Current Implementation:
- * - Tracks previous GPIO state to infer EDGE_FALL vs EDGE_RISE
- * - Works for most mechanical switches with debouncing
- * - May miss rapid transitions during interrupt latency
- * - Logic structure follows RP2040 port for consistency
- * 
- * Recommendations:
- * - Use only ONE edge interrupt per GPIO group
- * - Use debouncing (50-100ms) for mechanical switches
- * - For critical applications, implement level-trigger state machine (see Errata)
- */
-
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
@@ -44,7 +19,7 @@ typedef struct {
   uint32_t debounce_ms;
   uint32_t last_event_time;
   uint32_t last_event_type;
-  int last_gpio_level;  /* 前回のGPIO状態（エッジ判定用） */
+  int last_gpio_level;  /* Track previous GPIO state for edge detection */
 } mrb_irq_handler_t;
 
 typedef struct {
@@ -88,65 +63,65 @@ static void IRAM_ATTR
 gpio_isr_handler(void* arg)
 {
   mrb_irq_handler_t* handler = (mrb_irq_handler_t*)arg;
-  uint32_t current_time = esp_timer_get_time() / 1000;  /* ミリ秒変換 */
+  uint32_t current_time = esp_timer_get_time() / 1000;  /* Convert to milliseconds */
 
   if (!handler || !handler->enabled) {
     return;
   }
 
-  /* 現在のGPIO状態取得 */
+  /* Get current GPIO state */
   int current_level = gpio_get_level(handler->pin);
   int previous_level = handler->last_gpio_level;
 
-  /* 前回状態と比較してエッジ方向判定 */
+  /* Determine edge direction by comparing with previous state */
   uint32_t events;
   if (previous_level == 1 && current_level == 0) {
     events = 4; /* EDGE_FALL (HIGH → LOW) */
   } else if (previous_level == 0 && current_level == 1) {
     events = 8; /* EDGE_RISE (LOW → HIGH) */
   } else {
-    /* 状態変化なし（チャタリング、ノイズ、レベル割り込み） */
-    /* レベル割り込みの場合は event_mask が LEVEL_LOW/HIGH を含む */
+    /* No state change (chattering, noise, or level interrupt) */
+    /* For level interrupts, event_mask contains LEVEL_LOW/HIGH */
     if (current_level == 0 && (handler->event_mask & 1)) {
       events = 1; /* LEVEL_LOW */
     } else if (current_level == 1 && (handler->event_mask & 2)) {
       events = 2; /* LEVEL_HIGH */
     } else {
-      return;  /* 無視 */
+      return;  /* Ignore */
     }
   }
 
-  /* RP2040と同じロジック: event_maskでフィルタリング */
+  /* Same logic as RP2040: filter by event_mask */
   if (!(events & handler->event_mask)) {
-    return;  /* このハンドラが興味のないイベント */
+    return;  /* Handler not interested in this event */
   }
 
-  /* デバウンス判定 */
+  /* Check debounce */
   if (handler->debounce_ms > 0) {
     uint32_t time_diff = (current_time - handler->last_event_time) & 0xFFFFFFFF;
     if (time_diff < handler->debounce_ms && 
         events == handler->last_event_type) {
-      return;  /* デバウンス中のためスキップ */
+      return;  /* Skip due to debounce */
     }
   }
 
-  /* イベント履歴更新 */
+  /* Update event history */
   handler->last_event_time = current_time;
   handler->last_event_type = events;
-  handler->last_gpio_level = current_level;  /* 状態更新 */
+  handler->last_gpio_level = current_level;  /* Update state */
 
-  /* RP2040と同じロジック: ハンドラインデックスからIRQ ID計算 */
+  /* Same logic as RP2040: calculate IRQ ID from handler index */
   int irq_id = -1;
   for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
     if (&irq_handlers[i] == handler) {
-      irq_id = i + 1;  /* 1ベースのID */
+      irq_id = i + 1;  /* 1-based ID */
       break;
     }
   }
 
   if (irq_id < 0) return;
 
-  /* RP2040と同じロジック: イベントキュー追加 */
+  /* Same logic as RP2040: add event to queue */
   irq_event_t event = {
     .irq_id = irq_id,
     .event_type = events
@@ -158,7 +133,7 @@ gpio_isr_handler(void* arg)
 int
 IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
 {
-  /* 空きスロット検索 */
+  /* Find free slot */
   int slot = -1;
   for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
     if (!irq_handlers[i].enabled) {
@@ -168,17 +143,17 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
   }
 
   if (slot < 0) {
-    return -1;  /* 空きスロットなし */
+    return -1;  /* No free slots */
   }
 
-  /* RP2040と同じロジック: event_typeをevent_maskに変換 */
+  /* Same logic as RP2040: convert event_type to event_mask */
   uint32_t event_mask = 0;
   if (event_type & 1) event_mask |= 1;  /* LEVEL_LOW = 1 */
   if (event_type & 2) event_mask |= 2;  /* LEVEL_HIGH = 2 */
   if (event_type & 4) event_mask |= 4;  /* EDGE_FALL = 4 */
   if (event_type & 8) event_mask |= 8;  /* EDGE_RISE = 8 */
 
-  /* 初回使用時にキューとISRサービス初期化 */
+  /* Initialize queue and ISR service on first use */
   if (event_queue == NULL) {
     event_queue = xQueueCreate(IRQ_EVENT_QUEUE_SIZE, sizeof(irq_event_t));
     if (event_queue == NULL) {
@@ -194,13 +169,13 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     isr_service_installed = true;
   }
 
-  /* GPIO設定 */
+  /* Configure GPIO */
   gpio_config_t io_conf = {
     .pin_bit_mask = (1ULL << pin),
     .mode = GPIO_MODE_INPUT,
     .pull_up_en = GPIO_PULLUP_DISABLE,
     .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    .intr_type = GPIO_INTR_DISABLE
+    .intr_type = GPIO_INTR_DISABLE  /* Start with interrupts disabled */
   };
 
   esp_err_t ret = gpio_config(&io_conf);
@@ -208,15 +183,17 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     return -1;
   }
 
-  /* 割り込みタイプ設定
+  vTaskDelay(pdMS_TO_TICKS(10));  /* 10ms stabilization time */
+
+  /* Set interrupt type
    * 
-   * EDGE_FALL | EDGE_RISE の場合は GPIO_INTR_ANYEDGE を使用
-   * ISR内で前回状態と比較してFALL/RISEを判定
+   * For EDGE_FALL | EDGE_RISE, use GPIO_INTR_ANYEDGE
+   * Determine FALL/RISE in ISR by comparing with previous state
    */
   gpio_int_type_t intr_type = GPIO_INTR_DISABLE;
   
   if ((event_type & 4) && (event_type & 8)) {
-    /* 両エッジ指定 */
+    /* Both edges specified */
     intr_type = GPIO_INTR_ANYEDGE;
   } else if (event_type & 4) {
     intr_type = GPIO_INTR_NEGEDGE;  /* EDGE_FALL */
@@ -233,41 +210,57 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     return -1;
   }
 
-  /* ハンドラ情報保存 */
+  gpio_intr_disable(pin);  /* Ensure disabled first */
+  
+  int initial_level = gpio_get_level(pin);
+  
+  /* Store handler info */
   irq_handlers[slot].pin = pin;
   irq_handlers[slot].event_mask = event_mask;
   irq_handlers[slot].enabled = true;
   irq_handlers[slot].debounce_ms = debounce_ms;
   irq_handlers[slot].last_event_time = 0;
   irq_handlers[slot].last_event_type = 0;
-  irq_handlers[slot].last_gpio_level = gpio_get_level(pin);  /* 初期状態記録 */
+  irq_handlers[slot].last_gpio_level = initial_level;  /* Use stable initial state */
 
-  /* ISRハンドラ追加 */
+  /* Add ISR handler */
   ret = gpio_isr_handler_add(pin, gpio_isr_handler, &irq_handlers[slot]);
   if (ret != ESP_OK) {
     irq_handlers[slot].enabled = false;
     return -1;
   }
 
-  return slot + 1;  /* 1ベースのID返却 */
+  irq_event_t dummy_event;
+  while (xQueueReceive(event_queue, &dummy_event, 0) == pdTRUE) {
+    /* Drain queue */
+  }
+
+  ret = gpio_intr_enable(pin);
+  if (ret != ESP_OK) {
+    gpio_isr_handler_remove(pin);
+    irq_handlers[slot].enabled = false;
+    return -1;
+  }
+
+  return slot + 1;  /* Return 1-based ID */
 }
 
 bool
 IRQ_unregister_gpio(int irq_id)
 {
-  int slot = irq_id - 1;  /* 0ベースインデックス変換 */
+  int slot = irq_id - 1;  /* Convert to 0-based index */
 
   if (slot < 0 || slot >= MAX_IRQ_HANDLERS || !irq_handlers[slot].enabled) {
-    return false;  /* 無効なIDまたは未登録 */
+    return false;  /* Invalid ID or not registered */
   }
 
   bool prev_state = irq_handlers[slot].enabled;
 
-  /* GPIO IRQ無効化 */
+  /* Disable GPIO IRQ */
   gpio_isr_handler_remove(irq_handlers[slot].pin);
   gpio_set_intr_type(irq_handlers[slot].pin, GPIO_INTR_DISABLE);
 
-  /* ハンドラクリア */
+  /* Clear handler */
   memset(&irq_handlers[slot], 0, sizeof(mrb_irq_handler_t));
 
   return prev_state;
@@ -277,7 +270,7 @@ bool
 IRQ_peek_event(int *irq_id, int *event_type)
 {
   if (event_queue == NULL) {
-    return false;  /* キュー未初期化 */
+    return false;  /* Queue not initialized */
   }
 
   irq_event_t event;
@@ -287,12 +280,12 @@ IRQ_peek_event(int *irq_id, int *event_type)
     return true;
   }
 
-  return false;  /* キュー空 */
+  return false;  /* Queue empty */
 }
 
 void
 IRQ_init(void)
 {
-  /* データ構造初期化 */
+  /* Initialize data structures */
   memset(irq_handlers, 0, sizeof(irq_handlers));
 }
