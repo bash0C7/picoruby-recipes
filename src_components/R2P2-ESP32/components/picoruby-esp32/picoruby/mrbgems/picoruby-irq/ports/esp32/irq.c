@@ -102,23 +102,7 @@ gpio_isr_handler(void* arg)
   }
 
   if (irq_id < 0) return;
-
-  // 💡 LEVEL割り込みが検出された場合
-  if (events == 1 || events == 2) { /* LEVEL_LOW (1) または LEVEL_HIGH (2) */
-      // LEVEL割り込みはトリガーされ続けるのを防ぐため、即座に無効化する
-      // この無効化処理は、次のIRQ.processの後にRuby側でenableされることを想定している
-      gpio_intr_disable(handler->pin);
-      
-      // 注意: gpio_intr_disable は FreeRTOSタスクコンテキストで実行すべき関数のため、
-      // IRAM_ATTR ISR内で呼び出すと安全ではない可能性があります。
-      // FreeRTOS環境では、代わりに GPIO割り込みステータスレジスタを直接操作して
-      // フラグをクリアする方が安全です。
-      
-      // ESP-IDFの推奨: gpio_intr_disable/enable はISRでは避ける
-      // 適切な方法は、GPIOドライバ層の低レベル関数を使って割り込みステータスをクリアすることですが、
-      // ユーザーのCコードでは通常行いません。
-  } 
-
+   
   /* Same logic as RP2040: add event to queue */
   irq_event_t event = {
     .irq_id = irq_id,
