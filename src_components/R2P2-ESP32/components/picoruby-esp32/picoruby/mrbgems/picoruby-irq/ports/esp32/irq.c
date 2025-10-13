@@ -36,13 +36,19 @@ static void IRAM_ATTR
 gpio_isr_handler(void* arg)
 {
   mrb_irq_handler_t* handler = (mrb_irq_handler_t*)arg;
+  int pin = handler->pin;
+  
+  // 💡 LEVEL割り込みの連続トリガーを防ぐため、最初に割り込みを一時無効化
+  // 💡 エッジ割り込みでもチャタリング防止に役立つ
+  gpio_intr_disable(pin); 
   
   if (!handler || !handler->enabled) {
+    // 💡 無効化された場合も、念のため再有効化せずにリターン
     return;
   }
 
   uint32_t current_time = esp_timer_get_time() / 1000;
-  int current_level = gpio_get_level(handler->pin);
+  int current_level = gpio_get_level(pin);
   int previous_level = handler->last_gpio_level;
   
   /* 状態更新（エッジ判定に必要） */
@@ -63,6 +69,8 @@ gpio_isr_handler(void* arg)
 
   /* イベントマスクでフィルタ */
   if (!(events & handler->event_mask)) {
+    // 💡 フィルタで除外されても、割り込みを再有効化
+    gpio_intr_enable(pin);
     return;
   }
 
@@ -70,6 +78,8 @@ gpio_isr_handler(void* arg)
   if (handler->debounce_ms > 0) {
     uint32_t time_diff = (current_time - handler->last_event_time) & 0xFFFFFFFF;
     if (time_diff < handler->debounce_ms && events == handler->last_event_type) {
+      // 💡 デバウンスで破棄する場合も、割り込みを再有効化
+      gpio_intr_enable(pin);
       return;
     }
   }
@@ -90,8 +100,12 @@ gpio_isr_handler(void* arg)
 
   /* キュー満杯時はイベント破棄（RP2040と同じ挙動） */
   xQueueSendFromISR(event_queue, &event, NULL);
+  
+  /* 💡 割り込み処理が完了したので再有効化 */
+  gpio_intr_enable(pin);
 }
 
+// IRQ_register_gpio 以下は変更なし
 int
 IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
 {
@@ -131,38 +145,46 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     }
     isr_service_installed = true;
   }
-
-  /* GPIO設定 */
-  gpio_config_t io_conf = {
-    .pin_bit_mask = (1ULL << pin),
-    .mode = GPIO_MODE_INPUT,
-    .pull_up_en = GPIO_PULLUP_DISABLE,
-    .pull_down_en = GPIO_PULLDOWN_DISABLE,
-    .intr_type = GPIO_INTR_DISABLE
-  };
-
-  esp_err_t ret = gpio_config(&io_conf);
+  
+  /* 既存の割り込みを無効化 */
+  gpio_intr_disable(pin);
+  
+  /* アプリケーション側の設定を維持しつつ、ピンの方向を確実に入力に設定し直す */
+  esp_err_t ret = gpio_set_direction(pin, GPIO_MODE_INPUT);
   if (ret != ESP_OK) {
     return -1;
   }
 
-  /* GPIO安定化待機 */
-  vTaskDelay(pdMS_TO_TICKS(10));
-
-  /* 割り込みタイプ決定（エッジ優先） */
+  /* 割り込みタイプ決定（ご要望の優先順位で修正） */
   gpio_int_type_t intr_type;
-  
-  if ((event_type & 0xC) != 0) {
-    /* EDGE_FALL(4) または EDGE_RISE(8) が含まれる */
+
+  // 1. EDGE_FALL(4) のみが含まれる
+  if ((event_type & 0xC) == 0x4) {
+    intr_type = GPIO_INTR_NEGEDGE;
+  } 
+  // 2. EDGE_RISE(8) のみが含まれる
+  else if ((event_type & 0xC) == 0x8) {
+    intr_type = GPIO_INTR_POSEDGE;
+  }
+  // 3. EDGE_FALL(4) と EDGE_RISE(8) の両方が含まれる
+  else if ((event_type & 0xC) != 0) {
     intr_type = GPIO_INTR_ANYEDGE;
-  } else if ((event_type & 0x3) == 0x3) {
-    /* LEVEL_LOW(1) + LEVEL_HIGH(2) → ANYEDGE扱い */
-    intr_type = GPIO_INTR_ANYEDGE;
-  } else if (event_type & 1) {
+  } 
+  // 4. LEVEL_LOW(1) + LEVEL_HIGH(2) の両方が含まれる (エッジなし)
+  else if ((event_type & 0x3) == 0x3) {
+    /* LEVEL_LOW(1) + LEVEL_HIGH(2) → LOW扱い (ご要望に従う) */
     intr_type = GPIO_INTR_LOW_LEVEL;
-  } else if (event_type & 2) {
+  } 
+  // 5. LEVEL_LOW(1) のみが含まれる (エッジなし)
+  else if (event_type & 1) {
+    intr_type = GPIO_INTR_LOW_LEVEL;
+  } 
+  // 6. LEVEL_HIGH(2) のみが含まれる (エッジなし)
+  else if (event_type & 2) {
     intr_type = GPIO_INTR_HIGH_LEVEL;
-  } else {
+  } 
+  // 7. その他の無効な組み合わせ
+  else {
     return -1;  /* 到達しないはずだが念のため */
   }
 

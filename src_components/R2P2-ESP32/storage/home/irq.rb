@@ -29,6 +29,27 @@ end
 led = Led.new(27, 25)
 puts "LED initialized."
 
+puts "0 - LEVEL"
+# 💡 同じピンに対して別の割り込みを再登録
+level_irq_instance = button.irq(GPIO::LEVEL_LOW| GPIO::LEVEL_HIGH, debounce: 100, capture: {led: led}) do |button, event, cap|
+  # 💡 ブロック引数は event
+  case event
+  when GPIO::LEVEL_LOW
+    puts "[LEVEL IRQ] Pin LOW. Toggling LED."
+    cap[:led].toggle!
+  when GPIO::LEVEL_HIGH
+    puts "[LEVEL IRQ] Pin HIGH."
+  end
+end
+
+100.times do |i|
+  puts i
+  IRQ.process
+  sleep_ms(50)
+end
+
+level_irq_instance.unregister
+
 # --- STEP 1: EDGE割り込みの登録とテスト ---
 
 # 💡 割り込みインスタンスを変数にキャプチャ (必須)
@@ -75,7 +96,7 @@ level_irq_instance = button.irq(GPIO::LEVEL_LOW| GPIO::LEVEL_HIGH, debounce: 100
   when GPIO::LEVEL_LOW
     puts "[LEVEL IRQ] Pin LOW. Toggling LED."
     cap[:led].toggle!
-  when GPIO::LEVEL_LOW
+  when GPIO::LEVEL_HIGH
     puts "[LEVEL IRQ] Pin HIGH."
   end
 end
