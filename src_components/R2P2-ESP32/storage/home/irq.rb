@@ -69,15 +69,21 @@ end
 
 puts "\n--- STEP 3: LEVEL IRQ Re-register Test (Check button state) ---"
 # 💡 同じピンに対して別の割り込みを再登録
-level_irq_instance = button.irq(GPIO::LEVEL_LOW | GPIO::LEVEL_HIGH, debounce: 100, capture: {led: led}) do |button, event, cap|
+level_irq_instance = button.irq(GPIO::LEVEL_LOW| GPIO::LEVEL_HIGH, debounce: 100, capture: {led: led}) do |button, event, cap|
   # 💡 ブロック引数は event
   case event
   when GPIO::LEVEL_LOW
-    puts "[LEVEL IRQ] Pin LOW."
+    puts "[LEVEL IRQ] Pin LOW. Toggling LED."
     cap[:led].toggle!
-  when GPIO::LEVEL_HIGH
+  when GPIO::LEVEL_LOW
     puts "[LEVEL IRQ] Pin HIGH."
   end
+end
+
+100.times do |i|
+  puts i
+  IRQ.process
+  sleep_ms(50)
 end
 
 # --- STEP 4: Manual Event Processing Test ---
@@ -100,9 +106,9 @@ end
 
 # イベント蓄積フェーズ（3秒間）
 puts "\n🔴 ACTION REQUIRED: Press button RAPIDLY 5-10 times within 3 seconds!"
-puts "   (Quick taps to fill event queue)"
+puts "連打!!!!!!!!!!"
 100.times do |i|
-  print "連打!!!!!!!!!!"
+  puts i
   sleep_ms(50)
 end
 puts "\n✅ Time's up! Now processing events with limited count...\n"

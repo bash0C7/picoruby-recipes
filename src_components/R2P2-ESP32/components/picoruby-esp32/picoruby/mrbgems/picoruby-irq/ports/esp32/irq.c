@@ -3,7 +3,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/queue.h"
 #include "driver/gpio.h"
-#include "esp_log.h"
 #include "esp_timer.h"
 
 #include "../../include/irq.h"
@@ -13,12 +12,12 @@
 
 typedef struct {
   int pin;
-  uint32_t event_mask;           /* ユーザーが要求したイベントタイプ */
+  uint32_t event_mask;
   bool enabled;
   uint32_t debounce_ms;
   uint32_t last_event_time;
   uint32_t last_event_type;
-  gpio_int_type_t current_intr_type;  /* 現在設定されている割り込みタイプ */
+  int last_gpio_level;
 } mrb_irq_handler_t;
 
 typedef struct {
@@ -31,109 +30,72 @@ static QueueHandle_t event_queue = NULL;
 static bool isr_service_installed = false;
 
 /*
- * GPIO ISR Handler（統一状態マシン方式）
- * すべての割り込みをLOW_LEVEL/HIGH_LEVELの切り替えで実装
+ * GPIO ISR Handler
  */
 static void IRAM_ATTR
 gpio_isr_handler(void* arg)
 {
   mrb_irq_handler_t* handler = (mrb_irq_handler_t*)arg;
-  uint32_t current_time = esp_timer_get_time() / 1000;
-
+  
   if (!handler || !handler->enabled) {
     return;
   }
 
-  /* 現在のGPIOレベルを読む */
+  uint32_t current_time = esp_timer_get_time() / 1000;
   int current_level = gpio_get_level(handler->pin);
+  int previous_level = handler->last_gpio_level;
+  
+  /* 状態更新（エッジ判定に必要） */
+  handler->last_gpio_level = current_level;
 
-  /* 
-   * 現在のレベルに基づいてイベントタイプを決定
-   * LOW_LEVEL割り込みが発火 → ピンはLOW → LEVEL_LOWまたはEDGE_FALL
-   * HIGH_LEVEL割り込みが発火 → ピンはHIGH → LEVEL_HIGHまたはEDGE_RISE
-   */
-  uint32_t events;
-  if (current_level == 0) {
-    /* ピンがLOW */
-    if (handler->event_mask & 1) {
-      events = 1;  /* LEVEL_LOW */
-    } else if (handler->event_mask & 4) {
-      events = 4;  /* EDGE_FALL */
-    } else {
-      /* このレベルには興味がない */
-      gpio_set_intr_type(handler->pin, GPIO_INTR_HIGH_LEVEL);
-      return;
-    }
+  /* イベントタイプ判定 */
+  uint32_t events = 0;
+  
+  if (previous_level == 1 && current_level == 0) {
+    events = 4;  /* EDGE_FALL */
+  } else if (previous_level == 0 && current_level == 1) {
+    events = 8;  /* EDGE_RISE */
+  } else if (current_level == 0) {
+    events = 1;  /* LEVEL_LOW */
   } else {
-    /* ピンがHIGH */
-    if (handler->event_mask & 2) {
-      events = 2;  /* LEVEL_HIGH */
-    } else if (handler->event_mask & 8) {
-      events = 8;  /* EDGE_RISE */
-    } else {
-      /* このレベルには興味がない */
-      gpio_set_intr_type(handler->pin, GPIO_INTR_LOW_LEVEL);
-      return;
-    }
+    events = 2;  /* LEVEL_HIGH */
   }
 
-  /* デバウンスチェック */
+  /* イベントマスクでフィルタ */
+  if (!(events & handler->event_mask)) {
+    return;
+  }
+
+  /* デバウンス処理 */
   if (handler->debounce_ms > 0) {
     uint32_t time_diff = (current_time - handler->last_event_time) & 0xFFFFFFFF;
-    if (time_diff < handler->debounce_ms && 
-        events == handler->last_event_type) {
-      /* デバウンス期間中：次の状態に切り替えて終了 */
-      if (current_level == 0) {
-        gpio_set_intr_type(handler->pin, GPIO_INTR_HIGH_LEVEL);
-      } else {
-        gpio_set_intr_type(handler->pin, GPIO_INTR_LOW_LEVEL);
-      }
+    if (time_diff < handler->debounce_ms && events == handler->last_event_type) {
       return;
     }
   }
 
-  /* イベント履歴を更新 */
+  /* イベント履歴更新 */
   handler->last_event_time = current_time;
   handler->last_event_type = events;
 
-  /* 次の状態に切り替え（状態マシンの核心） */
-  if (current_level == 0) {
-    /* 現在LOW → 次はHIGHを監視 */
-    gpio_set_intr_type(handler->pin, GPIO_INTR_HIGH_LEVEL);
-    handler->current_intr_type = GPIO_INTR_HIGH_LEVEL;
-  } else {
-    /* 現在HIGH → 次はLOWを監視 */
-    gpio_set_intr_type(handler->pin, GPIO_INTR_LOW_LEVEL);
-    handler->current_intr_type = GPIO_INTR_LOW_LEVEL;
-  }
+  /* IRQ ID計算（ポインタ演算） */
+  int slot = handler - irq_handlers;
+  int irq_id = slot + 1;
 
-  /* IRQ IDを計算 */
-  int irq_id = -1;
-  for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
-    if (&irq_handlers[i] == handler) {
-      irq_id = i + 1;
-      break;
-    }
-  }
-
-  if (irq_id < 0) return;
-   
-  /* イベントをキューに追加 */
+  /* イベントキューイング */
   irq_event_t event = {
     .irq_id = irq_id,
     .event_type = events
   };
 
-  BaseType_t ret = xQueueSendFromISR(event_queue, &event, NULL);
-  if (ret != pdPASS) {
-    /* キューが満杯の場合はイベントを破棄 */
-  }
+  /* キュー満杯時はイベント破棄（RP2040と同じ挙動） */
+  xQueueSendFromISR(event_queue, &event, NULL);
 }
 
 int
 IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
 {
-  /* 空きスロットを探す */
+  /* 空きスロット検索 */
   int slot = -1;
   for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
     if (!irq_handlers[i].enabled) {
@@ -153,7 +115,7 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
   if (event_type & 4) event_mask |= 4;  /* EDGE_FALL */
   if (event_type & 8) event_mask |= 8;  /* EDGE_RISE */
 
-  /* キューとISRサービスの初期化 */
+  /* イベントキュー初期化 */
   if (event_queue == NULL) {
     event_queue = xQueueCreate(IRQ_EVENT_QUEUE_SIZE, sizeof(irq_event_t));
     if (event_queue == NULL) {
@@ -161,6 +123,7 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     }
   }
 
+  /* ISRサービスインストール */
   if (!isr_service_installed) {
     esp_err_t ret = gpio_install_isr_service(0);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
@@ -183,44 +146,57 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     return -1;
   }
 
-  vTaskDelay(pdMS_TO_TICKS(10));  /* 安定化時間 */
+  /* GPIO安定化待機 */
+  vTaskDelay(pdMS_TO_TICKS(10));
 
-  /* 
-   * 状態マシンの初期設定：現在のピンレベルに基づく
-   * - ピンがLOWなら、最初はHIGH_LEVELを監視（次の遷移を待つ）
-   * - ピンがHIGHなら、最初はLOW_LEVELを監視（次の遷移を待つ）
-   */
-  int initial_level = gpio_get_level(pin);
-  gpio_int_type_t intr_type = (initial_level == 0) ? GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL;
+  /* 割り込みタイプ決定（エッジ優先） */
+  gpio_int_type_t intr_type;
+  
+  if ((event_type & 0xC) != 0) {
+    /* EDGE_FALL(4) または EDGE_RISE(8) が含まれる */
+    intr_type = GPIO_INTR_ANYEDGE;
+  } else if ((event_type & 0x3) == 0x3) {
+    /* LEVEL_LOW(1) + LEVEL_HIGH(2) → ANYEDGE扱い */
+    intr_type = GPIO_INTR_ANYEDGE;
+  } else if (event_type & 1) {
+    intr_type = GPIO_INTR_LOW_LEVEL;
+  } else if (event_type & 2) {
+    intr_type = GPIO_INTR_HIGH_LEVEL;
+  } else {
+    return -1;  /* 到達しないはずだが念のため */
+  }
 
   ret = gpio_set_intr_type(pin, intr_type);
   if (ret != ESP_OK) {
     return -1;
   }
 
-  /* ハンドラ情報を保存 */
+  /* 初期状態読み取り */
+  int initial_level = gpio_get_level(pin);
+
+  /* ハンドラ情報保存 */
   irq_handlers[slot].pin = pin;
   irq_handlers[slot].event_mask = event_mask;
   irq_handlers[slot].enabled = true;
   irq_handlers[slot].debounce_ms = debounce_ms;
   irq_handlers[slot].last_event_time = 0;
   irq_handlers[slot].last_event_type = 0;
-  irq_handlers[slot].current_intr_type = intr_type;
+  irq_handlers[slot].last_gpio_level = initial_level;
 
-  /* ISRハンドラを追加 */
+  /* ISRハンドラ追加 */
   ret = gpio_isr_handler_add(pin, gpio_isr_handler, &irq_handlers[slot]);
   if (ret != ESP_OK) {
     irq_handlers[slot].enabled = false;
     return -1;
   }
 
-  /* キューをクリア */
+  /* イベントキュークリア */
   irq_event_t dummy_event;
   while (xQueueReceive(event_queue, &dummy_event, 0) == pdTRUE) {
-    /* 既存のイベントをクリア */
+    /* キュー空にする */
   }
 
-  /* 割り込みを有効化 */
+  /* 割り込み有効化 */
   ret = gpio_intr_enable(pin);
   if (ret != ESP_OK) {
     gpio_isr_handler_remove(pin);
@@ -242,11 +218,11 @@ IRQ_unregister_gpio(int irq_id)
 
   bool prev_state = irq_handlers[slot].enabled;
 
-  /* GPIO割り込みを無効化 */
+  /* GPIO割り込み無効化 */
   gpio_isr_handler_remove(irq_handlers[slot].pin);
   gpio_set_intr_type(irq_handlers[slot].pin, GPIO_INTR_DISABLE);
 
-  /* ハンドラをクリア */
+  /* ハンドラクリア */
   memset(&irq_handlers[slot], 0, sizeof(mrb_irq_handler_t));
 
   return prev_state;
