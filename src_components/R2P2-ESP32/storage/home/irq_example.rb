@@ -24,6 +24,16 @@ class Led
     end
     @ws2812.show_rgb(*@colors)
   end
+
+  def r!
+    @toggle_count = 1
+    toggle!
+  end
+
+  def b!
+    @toggle_count = 0
+    toggle!
+  end
 end
 
 led = Led.new(27, 25)
@@ -34,7 +44,8 @@ irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {led: led}) do |button
 end
 
 # Main loop
-1000.times do
+100.times do |i|
+  puts i
   IRQ.process
   sleep_ms(50)
 end
@@ -60,18 +71,18 @@ irq6 = button.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 50,
   end
 end
 
+led.b!
 100.times do |i|
   puts i if i % 20 == 0
   
   IRQ.process
   
   if state[:pressing]
-    if button.read == 0
-      led.toggle!
-      puts "h"
-    else
-      state[:pressing] = false
-    end
+    led.r!
+    puts "h"
+  else
+    state[:pressing] = false
+    led.b!
   end
   
   sleep_ms(50)
