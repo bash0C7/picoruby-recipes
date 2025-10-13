@@ -22,19 +22,60 @@ class Led
     @colors.size.times do |i|
       @colors[i] = [@pattern[current][:r], @pattern[current][:g], @pattern[current][:b]] 
     end
-    @ws2812 .show_rgb(*@colors)
+    @ws2812.show_rgb(*@colors)
   end
 end
 
 led = Led.new(27, 25)
 
-button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {led: led}) do |button, event, cap|
+irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {led: led}) do |button, event, cap|
   puts "Button pressed, toggling LED"
   cap[:led].toggle!
 end
 
 # Main loop
-loop do
+1000.times do
   IRQ.process
   sleep_ms(50)
 end
+
+irq.unregister
+
+
+# TEST 6
+puts "\nT6"
+puts "hold"
+
+state = {pressing: false}
+
+irq6 = button.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 50, 
+                  capture: {led: led, state: state}) do |btn, ev, cap|
+  case ev
+  when GPIO::EDGE_FALL
+    cap[:state][:pressing] = true
+    puts "s"
+  when GPIO::EDGE_RISE
+    cap[:state][:pressing] = false
+    puts "e"
+  end
+end
+
+100.times do |i|
+  puts i if i % 20 == 0
+  
+  IRQ.process
+  
+  if state[:pressing]
+    if button.read == 0
+      led.toggle!
+      puts "h"
+    else
+      state[:pressing] = false
+    end
+  end
+  
+  sleep_ms(50)
+end
+
+irq6.unregister
+puts "T6ok"
