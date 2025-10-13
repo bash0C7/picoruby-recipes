@@ -32,32 +32,7 @@ static QueueHandle_t event_queue = NULL;
 static bool isr_service_installed = false;
 
 /*
- * GPIO ISR Handler
- * 
- * Edge Direction Detection Strategy:
- * 
- * Unlike RP2040 which provides accurate event information via callback parameter,
- * ESP32 does not tell us which edge triggered the interrupt when using ANYEDGE mode.
- * 
- * Solution: Track previous GPIO state and compare with current state
- * 
- * Example:
- *   Previous: HIGH, Current: LOW  → EDGE_FALL detected
- *   Previous: LOW,  Current: HIGH → EDGE_RISE detected
- * 
- * Limitation:
- *   If multiple edges occur during interrupt latency, only the last transition
- *   is detected. For mechanical switches with debouncing, this is acceptable.
- * 
- *   Example failure case (rare):
- *     Time 0: HIGH → LOW (FALL triggers interrupt)
- *     Time 1: LOW → HIGH (glitch during latency)
- *     Time 2: HIGH → LOW (another glitch)
- *     Time 3: ISR executes, sees LOW
- *     Result: Previous=HIGH, Current=LOW → FALL detected (correct by luck)
- *     But missed the intermediate RISE
- * 
- * This is a best-effort implementation given ESP32 hardware constraints.
+ * GPIO ISR Handler (前回修正済み)
  */
 static void IRAM_ATTR
 gpio_isr_handler(void* arg)
@@ -72,16 +47,18 @@ gpio_isr_handler(void* arg)
   /* Get current GPIO state */
   int current_level = gpio_get_level(handler->pin);
   int previous_level = handler->last_gpio_level;
+  bool is_edge_event = false;
 
   /* Determine edge direction by comparing with previous state */
   uint32_t events;
   if (previous_level == 1 && current_level == 0) {
     events = 4; /* EDGE_FALL (HIGH → LOW) */
+    is_edge_event = true;
   } else if (previous_level == 0 && current_level == 1) {
     events = 8; /* EDGE_RISE (LOW → HIGH) */
+    is_edge_event = true;
   } else {
     /* No state change (chattering, noise, or level interrupt) */
-    /* For level interrupts, event_mask contains LEVEL_LOW/HIGH */
     if (current_level == 0 && (handler->event_mask & 1)) {
       events = 1; /* LEVEL_LOW */
     } else if (current_level == 1 && (handler->event_mask & 2)) {
@@ -93,6 +70,10 @@ gpio_isr_handler(void* arg)
 
   /* Same logic as RP2040: filter by event_mask */
   if (!(events & handler->event_mask)) {
+    // 重要な修正: 興味のないエッジイベントでも、次の遷移検出のために状態を更新する
+    if (is_edge_event) {
+        handler->last_gpio_level = current_level;
+    }
     return;  /* Handler not interested in this event */
   }
 
@@ -101,14 +82,16 @@ gpio_isr_handler(void* arg)
     uint32_t time_diff = (current_time - handler->last_event_time) & 0xFFFFFFFF;
     if (time_diff < handler->debounce_ms && 
         events == handler->last_event_type) {
+      // 重要な修正: デバウンスでスキップしても、次のエッジ検出のために状態を更新する
+      handler->last_gpio_level = current_level;
       return;  /* Skip due to debounce */
     }
   }
 
-  /* Update event history */
+  /* Update event history (イベントが成功裏に検出・処理される直前) */
   handler->last_event_time = current_time;
   handler->last_event_type = events;
-  handler->last_gpio_level = current_level;  /* Update state */
+  handler->last_gpio_level = current_level;  /* 成功時も当然更新 */
 
   /* Same logic as RP2040: calculate IRQ ID from handler index */
   int irq_id = -1;
@@ -186,19 +169,13 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
   vTaskDelay(pdMS_TO_TICKS(10));  /* 10ms stabilization time */
 
   /* Set interrupt type
-   * 
-   * For EDGE_FALL | EDGE_RISE, use GPIO_INTR_ANYEDGE
-   * Determine FALL/RISE in ISR by comparing with previous state
+   * 重要な修正: エッジイベントが要求された場合、単一でもANYEDGEを設定する
    */
   gpio_int_type_t intr_type = GPIO_INTR_DISABLE;
   
-  if ((event_type & 4) && (event_type & 8)) {
-    /* Both edges specified */
+  // EDGE_FALL (4) または EDGE_RISE (8) のどちらか、または両方が含まれる場合
+  if ((event_type & 4) || (event_type & 8)) {
     intr_type = GPIO_INTR_ANYEDGE;
-  } else if (event_type & 4) {
-    intr_type = GPIO_INTR_NEGEDGE;  /* EDGE_FALL */
-  } else if (event_type & 8) {
-    intr_type = GPIO_INTR_POSEDGE;  /* EDGE_RISE */
   } else if (event_type & 1) {
     intr_type = GPIO_INTR_LOW_LEVEL;  /* LEVEL_LOW */
   } else if (event_type & 2) {
