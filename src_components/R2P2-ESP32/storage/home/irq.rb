@@ -74,26 +74,58 @@ level_irq_instance = button.irq(GPIO::LEVEL_LOW | GPIO::LEVEL_HIGH, debounce: 10
   case event
   when GPIO::LEVEL_LOW
     puts "[LEVEL IRQ] Pin LOW."
+    cap[:led].toggle!
   when GPIO::LEVEL_HIGH
     puts "[LEVEL IRQ] Pin HIGH."
   end
 end
 
-# Main loop (LEVEL割り込みテスト)
-puts "Processing LEVEL IRQ events (Press/Hold/Release button quickly)."
-100.times do |i|
-  puts i
-  IRQ.process
-  sleep_ms(50)
+# --- STEP 4: Manual Event Processing Test ---
+
+puts "\n--- STEP 4: Manual Event Processing Test ---"
+puts "Testing IRQ.process(N) with limited event count."
+
+level_irq_instance.unregister
+
+# デバウンスを短く（10ms）してイベントを溜めやすくする
+manual_irq_instance = button.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 10, capture: {led: led}) do |button, event, cap|
+  case event
+  when GPIO::EDGE_FALL
+    puts "[Manual IRQ] FALL detected. Toggling LED."
+    cap[:led].toggle!
+  when GPIO::EDGE_RISE  
+    puts "[Manual IRQ] RISE detected."
+  end
 end
 
-# Main loop (processed_count)
-puts "Processing processed_count."
+# イベント蓄積フェーズ（3秒間）
+puts "\n🔴 ACTION REQUIRED: Press button RAPIDLY 5-10 times within 3 seconds!"
+puts "   (Quick taps to fill event queue)"
 100.times do |i|
-  puts i
-  processed_count = IRQ.process(10)  # Process up to 10 events at a time
-  if processed_count > 0
-    puts "Processed #{processed_count} LEVEL events."
-  end
+  print "連打!!!!!!!!!!"
   sleep_ms(50)
 end
+puts "\n✅ Time's up! Now processing events with limited count...\n"
+
+# 最大3イベントだけ処理
+puts "\n--- First batch: Processing up to 3 events ---"
+processed_count = IRQ.process(3)
+puts "✅ Processed #{processed_count} events (expected: 0-3)"
+
+sleep_ms(500)
+
+# 残りのイベントを処理
+puts "\n--- Second batch: Processing remaining events ---"
+remaining_count = IRQ.process(10)
+puts "✅ Processed #{remaining_count} remaining events"
+
+sleep_ms(500)
+
+# 全イベント処理を確認
+puts "\n--- Third batch: Confirming queue is empty ---"
+final_count = IRQ.process(10)
+puts "✅ Processed #{final_count} events (expected: 0)"
+
+manual_irq_instance.unregister
+
+puts "\n🎉 All Tests Complete!"
