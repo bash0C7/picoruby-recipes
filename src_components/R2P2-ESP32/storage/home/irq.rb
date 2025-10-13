@@ -45,9 +45,9 @@ end
 
 puts "\n--- STEP 1: EDGE IRQ Test Start (Check button press/release) ---"
 100.times do |i|
+  puts i
   IRQ.process
-  sleep_ms(10)
-  break if i == 50 # テスト時間制限
+  sleep_ms(50)
 end
 
 # --- STEP 2: Unregisterの確認 ---
@@ -59,22 +59,21 @@ edge_irq_instance.unregister
 
 # 割り込みが機能しないことを確認するためのループ
 puts "Checking for residual EDGE events (Should be silent)..."
-10.times do
+100.times do |i|
+  puts i
   IRQ.process
-  sleep_ms(10)
+  sleep_ms(50)
 end
 
 # --- STEP 3: LEVEL割り込みの再登録とテスト ---
 
 puts "\n--- STEP 3: LEVEL IRQ Re-register Test (Check button state) ---"
 # 💡 同じピンに対して別の割り込みを再登録
-level_irq_instance = button.irq(GPIO::LEVEL_LOW | GPIO::LEVEL_HIGH, debounce: 0, capture: {led: led}) do |button, event, cap|
+level_irq_instance = button.irq(GPIO::LEVEL_LOW | GPIO::LEVEL_HIGH, debounce: 100, capture: {led: led}) do |button, event, cap|
   # 💡 ブロック引数は event
   case event
   when GPIO::LEVEL_LOW
-    # 💡 LEVEL_LOWは押し続けている間何度も発火します
-    puts "[LEVEL IRQ] Pin LOW. Toggling LED."
-    cap[:led].toggle!
+    puts "[LEVEL IRQ] Pin LOW."
   when GPIO::LEVEL_HIGH
     puts "[LEVEL IRQ] Pin HIGH."
   end
@@ -82,11 +81,19 @@ end
 
 # Main loop (LEVEL割り込みテスト)
 puts "Processing LEVEL IRQ events (Press/Hold/Release button quickly)."
-# sleep_msを小さくしたことによる動作を確認
-loop do
+100.times do |i|
+  puts i
+  IRQ.process
+  sleep_ms(50)
+end
+
+# Main loop (processed_count)
+puts "Processing processed_count."
+100.times do |i|
+  puts i
   processed_count = IRQ.process(10)  # Process up to 10 events at a time
   if processed_count > 0
     puts "Processed #{processed_count} LEVEL events."
   end
-  sleep_ms(5) # 非常に小さい sleep_ms で高速なイベント処理を可能に
+  sleep_ms(50)
 end
