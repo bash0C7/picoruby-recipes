@@ -36,7 +36,7 @@ class Led
   end
 end
 
-led = Led.new(27, 25)
+led = Led.new(22, 60)
 
 irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {led: led}) do |button, event, cap|
   puts "Button pressed, toggling LED"
