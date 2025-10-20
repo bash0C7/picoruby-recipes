@@ -9,8 +9,8 @@ require 'ws2812'
 require 'uart'
 
 # 設定
-LED_COUNT = 25
-LED_PIN = 27
+LED_COUNT = 60
+LED_PIN = 22
 UART_TX = 26
 UART_RX = 32
 
