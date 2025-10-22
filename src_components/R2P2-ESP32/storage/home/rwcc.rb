@@ -1,51 +1,59 @@
-require 'i2c'
-require 'mpu6886'
-require 'ws2812'
 require 'uart'
 
-puts "Start"
+$pc = nil
+$md = nil
+$midi_buffer = []
 
-# I2C先に確保
-i2c = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
-sleep_ms(100)
-
-# LED
-led = WS2812.new(RMTDriver.new(22))
-sleep_ms(100)
-
-# UART
-pc = UART.new(unit: :ESP32_UART0, baudrate: 115200)
-sleep_ms(100)
-
-md = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 26, rxd_pin: 32)
-sleep_ms(100)
-
-# MPU（i2c参照を保持）
-mpu = MPU6886.new(i2c)
-mpu.accel_range = MPU6886::ACCEL_RANGE_4G
-sleep_ms(100)
-
-# 色配列（実証済み形式）
-co = Array.new(60) { 0xFF8040 }
-
-puts "Cal"
-sx = sy = sz = 0
-5.times do |i|
-  a = mpu.acceleration
-  sx += (a[:x] * 100).to_i
-  sy += (a[:y] * 100).to_i
-  sz += (a[:z] * 100).to_i
-  sleep_ms 100
+def init_hardware
+  puts "Hardware Init..."
+  $pc = UART.new(unit: :ESP32_UART0, baudrate: 115200)
+  sleep_ms(100)
+  $pc.clear_rx_buffer
+  sleep_ms(50)
+  $md = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
+  sleep_ms(100)
+  $md.clear_rx_buffer
+  sleep_ms(50)
+  init_midi_synth
+  puts "Ready"
 end
-bx = [sx / 5, sy / 5, sz / 5]
 
-puts "Ready"
+def init_midi_synth
+  $md.write((0xB9).chr + (0x00).chr + (0x00).chr)
+  sleep_ms(20)
+  $md.write((0xC9).chr + (0).chr)
+  sleep_ms(50)
+end
 
-puts "Go"
+def process_pc_midi
+  return unless $pc.bytes_available > 0
+  raw_data = ""
+  while $pc.bytes_available > 0
+    dt = $pc.read(1)
+    raw_data += dt if dt && dt.length > 0
+  end
+  return if raw_data.length == 0
+  puts "RX:#{raw_data.length}"
+  raw_data.each_byte { |b| $midi_buffer.push(b) }
+  while $midi_buffer.length >= 3
+    midi_msg = ""
+    3.times { midi_msg += $midi_buffer.shift.chr }
+    $md.write(midi_msg)
+  end
+end
 
-loop do
-  a = mpu.acceleration
-  puts "X: #{(a[:x] * 100).to_i}"
-  
-  sleep_ms 500
+begin
+  init_hardware
+  puts "Start"
+  loop_count = 0
+  loop do
+    loop_count += 1
+    process_pc_midi
+    if loop_count % 500 == 0
+      puts "L:#{loop_count}"
+    end
+    sleep_ms(20)
+  end
+rescue => e
+  puts "Error: #{e.message}"
 end
