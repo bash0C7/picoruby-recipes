@@ -86,6 +86,20 @@ serial.write([0xC9, kit_choice].map(&:chr).join)
 sleep(0.1)
 puts "✓ ドラムキット選択: #{drum_kits[kit_choice]}"
 
+# ===== プロトコル v2: 固定FX初期化 =====
+# Reverb level 5 → send value 6 (range: 1-10)
+reverb_value = 6
+serial.write(reverb_value.chr)
+sleep(0.05)
+
+# Chorus level 5 → send value 16 (range: 11-20)
+chorus_value = 16
+serial.write(chorus_value.chr)
+sleep(0.05)
+
+puts "✓ リバーブ初期化: レベル5（値=#{reverb_value}）"
+puts "✓ コーラス初期化: レベル5（値=#{chorus_value}）"
+
 puts "\n=== フィンガードラムモード開始 ==="
 puts "【下段】 z:キック x:スネア c:クローズHH v:オープンHH b:クラッシュ n:ライド m:クラップ"
 puts "【上段】 a-h:タム各種"
