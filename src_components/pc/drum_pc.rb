@@ -4,6 +4,14 @@ require 'io/console'
 puts "=== PicoRuby Demo - PC Finger Drum ==="
 puts "キーボード → MIDI → ATOM Matrix → MIDI Unit にょん！"
 
+# プロセスID表示と終了コマンド
+pid = $$
+puts "\n【プロセス情報】"
+puts "PID: #{pid}"
+puts "終了コマンド: kill -INT #{pid}"
+puts "\n"
+puts "チェケラッチョ！！演奏開始にょん！"
+
 # ===== ドラムキット定義 =====
 drum_kits = {
   0 => "Standard Drum Kit",
@@ -84,14 +92,6 @@ puts "【上段】 a-h:タム各種"
 puts "【数字】 1:カウベル 2:タンバリン 3:チャイナ 4:スプラッシュ"
 puts "同時押し対応！ キック+スネア等、複数キーを同時に叩けますにょん！"
 puts "Ctrl+C で終了\n"
-puts "チェケラッチョ！！演奏開始にょん！"
-
-# プロセスID表示と終了コマンド
-pid = $$
-puts "\n【プロセス情報】"
-puts "PID: #{pid}"
-puts "終了コマンド: kill -INT #{pid}"
-puts "\n"
 puts "チェケラッチョ！！演奏開始にょん！"
 
 STDIN.raw!
