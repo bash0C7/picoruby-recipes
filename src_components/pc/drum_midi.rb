@@ -1,7 +1,7 @@
 require 'unimidi'
 require 'uart'
 
-puts "=== DDJ-400 Finger Drum → ATOM Matrix (Simple Protocol) にょん！==="
+puts "=== DDJ-400 Finger Drum + FX Control にょん！==="
 
 # プロセスID表示
 pid = $$
@@ -43,7 +43,7 @@ serial_num = gets.chomp.to_i
 serial = UART.open(serial_devices[serial_num], 115200)
 puts "シリアル接続完了: #{serial_devices[serial_num]}"
 
-# 【重要】起動待機（PicoRuby側の初期化完了を待つ）
+# 【重要】起動待機
 puts "\n⏳ ATOM Matrix起動待機中（3秒）..."
 sleep(3)
 
@@ -91,27 +91,28 @@ deck2_to_drum = {
   7 => 52,   # PAD 8: Chinese Cymbal
 }
 
-puts "\n=== 🥁 Simple Drum Protocol 開始 ==="
+# FX状態管理
+current_reverb_level = 5    # 0-9 (中間値)
+current_resonance_level = 5  # 0-9 (中間値)
+
+puts "\n=== 🥁 Enhanced Drum + FX Protocol にょん！==="
 puts ""
-puts "【通信プロトコル】"
-puts "  PC → ATOM: ドラムノート番号1バイト（36-56）"
-puts "  例: 0x24(36) = Kick, 0x26(38) = Snare"
+puts "【通信プロトコル v2】"
+puts "  ドラムノート: 36-56 (1byte)"
+puts "  残響レベル:   1-10 (1byte, DECK1 FILTER)"
+puts "  レゾナンス:   11-20 (1byte, DECK2 FILTER)"
 puts ""
-puts "【DECK 1 (左側8パッド) - 基本ドラムキット】"
-puts "  PAD1: キック      PAD5: クラッシュ"
-puts "  PAD2: スネア      PAD6: ライド"
-puts "  PAD3: クローズHH  PAD7: クラップ"
-puts "  PAD4: オープンHH  PAD8: カウベル"
+puts "【DECK 1 - 基本ドラムキット + 残響コントロール】"
+puts "  PAD1-8: キック/スネア/HH/シンバル等"
+puts "  FILTER: 残響（リバーブ）レベル 0-9"
 puts ""
-puts "【DECK 2 (右側8パッド) - タム＆パーカッション】"
-puts "  PAD1: ロータム    PAD5: ハイタム"
-puts "  PAD2: ローミッド  PAD6: ハイタム"
-puts "  PAD3: ミッドタム  PAD7: タンバリン"
-puts "  PAD4: ミッドハイ  PAD8: チャイナ"
+puts "【DECK 2 - タム＆パーカッション + レゾナンスコントロール】"
+puts "  PAD1-8: 各種タム/タンバリン/チャイナ"
+puts "  FILTER: レゾナンス（音の響き）レベル 0-9"
 puts ""
 puts "チェケラッチョ！！演奏開始にょん！"
 
-# 送信カウンター（デバッグ用）
+# 送信カウンター
 sent_count = 0
 
 # メインループ
@@ -126,9 +127,9 @@ loop do
       midi_bytes = message[:data]
       status = midi_bytes[0]
       channel = status & 0x0F
+      msg_type = status & 0xF0
       
-      # Note On のみ処理
-      case status & 0xF0
+      case msg_type
       when 0x90  # Note On
         next unless midi_bytes.length >= 3
         
@@ -149,15 +150,57 @@ loop do
         end
         
         if drum_note
-          # 【核心部分】ドラムノート番号を1バイトで送信
+          # ドラムノート番号を1byteで送信
           serial.write(drum_note.chr)
           
           sent_count += 1
           deck_name = (channel == 7) ? "DECK1" : "DECK2"
           instrument_name = drum_names[drum_note] || "Unknown"
           
-          # 詳細ログ（HEX表示付き）
-          puts "[#{sent_count}] #{deck_name} PAD#{pad_note+1} → 0x#{drum_note.to_s(16).upcase}(#{drum_note}) #{instrument_name}"
+          puts "[#{sent_count}] 🥁 #{deck_name} PAD#{pad_note+1} → #{instrument_name} (#{drum_note})"
+        end
+        
+      when 0xB0  # Control Change
+        next unless midi_bytes.length >= 3
+        next unless channel == 6  # Channel 7 (FILTER knobs)
+        
+        cc_num = midi_bytes[1]
+        cc_value = midi_bytes[2]
+        
+        case cc_num
+        when 23  # DECK1 FILTER (MSB)
+          # MSB値（0-127）を10段階（0-9）にマッピング
+          level = (cc_value * 10 / 128).to_i
+          level = 9 if level > 9
+          
+          # 値が変化した場合のみ送信
+          if level != current_reverb_level
+            current_reverb_level = level
+            
+            # 残響レベルとして送信（1-10）
+            send_value = level + 1
+            serial.write(send_value.chr)
+            
+            sent_count += 1
+            puts "[#{sent_count}] 🌊 REVERB: Level #{level} (raw:#{cc_value} → #{send_value})"
+          end
+          
+        when 24  # DECK2 FILTER (MSB)
+          # MSB値（0-127）を10段階（0-9）にマッピング
+          level = (cc_value * 10 / 128).to_i
+          level = 9 if level > 9
+          
+          # 値が変化した場合のみ送信
+          if level != current_resonance_level
+            current_resonance_level = level
+            
+            # レゾナンスレベルとして送信（11-20）
+            send_value = level + 11
+            serial.write(send_value.chr)
+            
+            sent_count += 1
+            puts "[#{sent_count}] ✨ RESONANCE: Level #{level} (raw:#{cc_value} → #{send_value})"
+          end
         end
       end
     end

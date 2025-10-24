@@ -37,7 +37,7 @@ def init_hardware
   $md = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
   sleep_ms(50)
   
-  # ゴミデータ読み捨て（初回のみ）
+  # ゴミデータ読み捨て
   $pc.clear_rx_buffer
   sleep_ms(100)
   
@@ -57,8 +57,15 @@ def init_hardware
   puts "Ready!"
 end
 
+# MIDI CC送信（レゾナンスとリバーブ用）
+def send_midi_cc(cc_num, value)
+  # 0x09 = Control Change Channel 10 (ドラムチャンネル)
+  midi_msg = (0xB9).chr + cc_num.chr + value.chr
+  $md.write(midi_msg)
+end
+
 # メイン処理ループ
-def process_drums
+def process_commands
   return unless $pc.bytes_available > 0
   
   # 利用可能な全バイトを処理
@@ -66,34 +73,85 @@ def process_drums
     data = $pc.read(1)
     next unless data && data.length == 1
     
-    # ドラムノート番号取得
-    note = data[0].ord
+    # コマンドバイト取得
+    cmd = data[0].ord
     
-    # 有効範囲チェック（36-56のみ）
-    next unless note >= 36 && note <= 56
-    
-    # MIDI Note On メッセージ生成
-    # 0x99 = Note On Channel 10 (ドラム専用チャンネル)
-    # note = ドラム番号（36-56）
-    # 0x7F = Velocity 127（最大音量）
-    midi_msg = (0x99).chr + note.chr + (0x7F).chr
-    
-    # MIDI音源へ送信
-    $md.write(midi_msg)
-    
-    # デバッグ表示（楽器名付き）
-    $count += 1
-    name = DRUM_NAMES[note] || "?"
-    puts "[#{$count}] #{note}:#{name}"
+    # コマンド種別判定
+    case cmd
+    when 36..56
+      # ドラムノート（36-56）
+      process_drum_note(cmd)
+      
+    when 1..10
+      # 残響レベル（1-10 → 0-9）
+      process_reverb(cmd)
+      
+    when 11..20
+      # レゾナンスレベル（11-20 → 0-9）
+      process_resonance(cmd)
+      
+    else
+      # 範囲外は無視
+    end
   end
+end
+
+# ドラムノート処理
+def process_drum_note(note)
+  # MIDI Note On メッセージ生成
+  # 0x99 = Note On Channel 10 (ドラム専用チャンネル)
+  midi_msg = (0x99).chr + note.chr + (0x7F).chr
+  $md.write(midi_msg)
+  
+  # デバッグ表示
+  $count += 1
+  name = DRUM_NAMES[note] || "?"
+  puts "[#{$count}] 🥁 #{note}:#{name}"
+end
+
+# 残響（リバーブ）処理
+def process_reverb(level_cmd)
+  # 1-10 → 0-9
+  level = level_cmd - 1
+  
+  # 0-9 → 0-127にマッピング
+  cc_value = (level * 127 / 9).to_i
+  cc_value = 127 if cc_value > 127
+  
+  # MIDI CC#91 (Reverb Send Level)
+  send_midi_cc(91, cc_value)
+  
+  # デバッグ表示
+  $count += 1
+  puts "[#{$count}] 🌊 REVERB: #{level} → CC#{cc_value}"
+end
+
+# レゾナンス処理
+def process_resonance(level_cmd)
+  # 11-20 → 0-9
+  level = level_cmd - 11
+  
+  # 0-9 → 0-127にマッピング
+  cc_value = (level * 127 / 9).to_i
+  cc_value = 127 if cc_value > 127
+  
+  # MIDI CC#71 (Resonance)
+  send_midi_cc(71, cc_value)
+  
+  # デバッグ表示
+  $count += 1
+  puts "[#{$count}] ✨ RESONANCE: #{level} → CC#{cc_value}"
 end
 
 # メイン実行
 begin
   init_hardware
   
-  puts "=== Drum Receiver ==="
-  puts "1Byte Protocol: note(36-56)"
+  puts "=== Enhanced Drum Receiver にょん！==="
+  puts "Protocol v2:"
+  puts "  36-56  : Drum Notes"
+  puts "  1-10   : Reverb (CC#91)"
+  puts "  11-20  : Resonance (CC#71)"
   puts ""
   
   loop_count = 0
@@ -101,11 +159,11 @@ begin
   loop do
     loop_count += 1
     
-    # ドラム処理
-    process_drums
+    # コマンド処理
+    process_commands
     
-    # ハートビート（5秒ごと）
-    if loop_count % 5000 == 0
+    # ハートビート（10秒ごと）
+    if loop_count % 10000 == 0
       puts "--- Loop: #{loop_count} ---"
     end
     
