@@ -71,4 +71,5 @@ Thumbs.db
 .vscode/
 
 /components/
-.claude/
+.claude/*
+!.claude/skills/

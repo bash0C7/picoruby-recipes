@@ -60,12 +60,29 @@ rake check_env   # 環境確認
 - Rubyアプリ: `src_components/R2P2-ESP32/storage/home/`
 - ビルド設定: `build_config/xtensa-esp.rb`
 
+## 🥁 Finger Drum Project
+
+DDJ-400コントローラーとATOM Matrixを使ったリアルタイムドラムパフォーマンスシステムピョン。
+
+**詳細情報**: @.claude/skills/finger-drum/SKILL.md を参照
+
+**関連ファイル**:
+- 設計書・README: @src_components/pc/drum_readme.rb
+- プロトコル仕様: @src_components/pc/drum_protcolspec.md
+- PC側MIDI版: @src_components/pc/drum_midi.rb
+- PC側キーボード版: @src_components/pc/drum_pc.rb
+- PicoRubyコンパクト版: @src_components/R2P2-ESP32/storage/home/rwcc.rb
+- PicoRubyフル版（LED付き）: @src_components/R2P2-ESP32/storage/home/rwc.rb
+
+フィンガードラム、DDJ-400、ドラムパフォーマンス、MIDI演奏等のキーワードで自動的に関連情報をロードするチェケラッチョ！
+
 ## 自動参照される情報
 
 ハードウェアやPicoRubyについて質問すると、Claudeが自動的に詳細情報を読み込むピョン：
 
 - **GPIO、LED、センサー** → ハードウェア仕様を自動参照
 - **PicoRuby制約、メモリ最適化** → 開発ガイドを自動参照
+- **Finger Drum** → フィンガードラムシステム情報を自動参照
 
 覚える必要なし！必要な時だけ自動ロードされるチェケラッチョ！
 
