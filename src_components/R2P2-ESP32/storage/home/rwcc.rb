@@ -25,6 +25,16 @@ DRUM_NAMES = {
   56 => "Cowbell"
 }
 
+# MIDI ドラムキット定義
+DRUM_KITS = {
+  0 => "Standard Drum Kit",
+  8 => "Room Drum Kit",
+  16 => "Power Drum Kit",
+  24 => "Electronic Drum Kit",
+  25 => "TR-808 Drum Kit",
+  32 => "Jazz Drum Kit"
+}
+
 # ハードウェア初期化
 def init_hardware
   puts "Init..."
@@ -50,8 +60,8 @@ def init_hardware
   $md.clear_rx_buffer
   sleep_ms(50)
   
-  # MIDI音源初期化（Standard Drum Kit = Program 0）
-  $md.write((0xC9).chr + (0).chr)  # Program Change Ch10
+  # MIDI音源初期化（TR-808 Drum Kit = Program 25）
+  $md.write((0xC9).chr + (25).chr)  # Program Change Ch10
   sleep_ms(100)
   
   puts "Ready!"
@@ -148,6 +158,7 @@ begin
   init_hardware
   
   puts "=== Enhanced Drum Receiver にょん！==="
+  puts "Drum Kit: #{DRUM_KITS[25]}"
   puts "Protocol v2:"
   puts "  36-56  : Drum Notes"
   puts "  1-10   : Reverb (CC#91)"
