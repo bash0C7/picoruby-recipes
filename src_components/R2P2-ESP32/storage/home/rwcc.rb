@@ -57,9 +57,9 @@ def init_hardware
   puts "Ready!"
 end
 
-# MIDI CC送信（レゾナンスとリバーブ用）
+# MIDI CC送信（コーラスとリバーブ用）
 def send_midi_cc(cc_num, value)
-  # 0x09 = Control Change Channel 10 (ドラムチャンネル)
+  # 0xB9 = Control Change Channel 10 (ドラムチャンネル)
   midi_msg = (0xB9).chr + cc_num.chr + value.chr
   $md.write(midi_msg)
 end
@@ -87,8 +87,8 @@ def process_commands
       process_reverb(cmd)
       
     when 11..20
-      # レゾナンスレベル（11-20 → 0-9）
-      process_resonance(cmd)
+      # コーラスレベル（11-20 → 0-9）
+      process_chorus(cmd)
       
     else
       # 範囲外は無視
@@ -126,21 +126,21 @@ def process_reverb(level_cmd)
   puts "[#{$count}] 🌊 REVERB: #{level} → CC#{cc_value}"
 end
 
-# レゾナンス処理
-def process_resonance(level_cmd)
+# コーラス処理
+def process_chorus(level_cmd)
   # 11-20 → 0-9
   level = level_cmd - 11
-  
+
   # 0-9 → 0-127にマッピング
   cc_value = (level * 127 / 9).to_i
   cc_value = 127 if cc_value > 127
-  
-  # MIDI CC#71 (Resonance)
-  send_midi_cc(71, cc_value)
-  
+
+  # MIDI CC#93 (Chorus Send Level)
+  send_midi_cc(93, cc_value)
+
   # デバッグ表示
   $count += 1
-  puts "[#{$count}] ✨ RESONANCE: #{level} → CC#{cc_value}"
+  puts "[#{$count}] 🎵 CHORUS: #{level} → CC#{cc_value}"
 end
 
 # メイン実行
@@ -151,7 +151,7 @@ begin
   puts "Protocol v2:"
   puts "  36-56  : Drum Notes"
   puts "  1-10   : Reverb (CC#91)"
-  puts "  11-20  : Resonance (CC#71)"
+  puts "  11-20  : Chorus (CC#93)"
   puts ""
   
   loop_count = 0

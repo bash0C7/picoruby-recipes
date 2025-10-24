@@ -93,22 +93,22 @@ deck2_to_drum = {
 
 # FX状態管理
 current_reverb_level = 5    # 0-9 (中間値)
-current_resonance_level = 5  # 0-9 (中間値)
+current_chorus_level = 5    # 0-9 (中間値)
 
 puts "\n=== 🥁 Enhanced Drum + FX Protocol にょん！==="
 puts ""
 puts "【通信プロトコル v2】"
 puts "  ドラムノート: 36-56 (1byte)"
 puts "  残響レベル:   1-10 (1byte, DECK1 FILTER)"
-puts "  レゾナンス:   11-20 (1byte, DECK2 FILTER)"
+puts "  コーラス:     11-20 (1byte, DECK2 FILTER)"
 puts ""
 puts "【DECK 1 - 基本ドラムキット + 残響コントロール】"
 puts "  PAD1-8: キック/スネア/HH/シンバル等"
 puts "  FILTER: 残響（リバーブ）レベル 0-9"
 puts ""
-puts "【DECK 2 - タム＆パーカッション + レゾナンスコントロール】"
+puts "【DECK 2 - タム＆パーカッション + コーラスコントロール】"
 puts "  PAD1-8: 各種タム/タンバリン/チャイナ"
-puts "  FILTER: レゾナンス（音の響き）レベル 0-9"
+puts "  FILTER: コーラス（音の広がり）レベル 0-9"
 puts ""
 puts "チェケラッチョ！！演奏開始にょん！"
 
@@ -189,17 +189,17 @@ loop do
           # MSB値（0-127）を10段階（0-9）にマッピング
           level = (cc_value * 10 / 128).to_i
           level = 9 if level > 9
-          
+
           # 値が変化した場合のみ送信
-          if level != current_resonance_level
-            current_resonance_level = level
-            
-            # レゾナンスレベルとして送信（11-20）
+          if level != current_chorus_level
+            current_chorus_level = level
+
+            # コーラスレベルとして送信（11-20）
             send_value = level + 11
             serial.write(send_value.chr)
-            
+
             sent_count += 1
-            puts "[#{sent_count}] ✨ RESONANCE: Level #{level} (raw:#{cc_value} → #{send_value})"
+            puts "[#{sent_count}] 🎵 CHORUS: Level #{level} (raw:#{cc_value} → #{send_value})"
           end
         end
       end

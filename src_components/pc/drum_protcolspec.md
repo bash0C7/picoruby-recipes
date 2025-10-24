@@ -2,7 +2,7 @@
 
 ## Overview
 
-An ultra-minimalist 1-byte protocol for real-time drum performance with dynamic reverb and resonance control via DDJ-400 FILTER knobs.
+An ultra-minimalist 1-byte protocol for real-time drum performance with dynamic reverb and chorus control via DDJ-400 FILTER knobs.
 
 ## Design Philosophy
 
@@ -27,7 +27,7 @@ An ultra-minimalist 1-byte protocol for real-time drum performance with dynamic 
 ```
 36-56  : Drum Note Numbers (21 drum sounds)
 1-10   : Reverb Level (10 steps, from DECK1 FILTER)
-11-20  : Resonance Level (10 steps, from DECK2 FILTER)
+11-20  : Chorus Level (10 steps, from DECK2 FILTER)
 ```
 
 ### Command Type 1: Drum Notes (36-56)
@@ -69,22 +69,22 @@ An ultra-minimalist 1-byte protocol for real-time drum performance with dynamic 
 **MIDI Mapping**: Sent as MIDI CC#91 (Reverb Send Level)
 - Level 0-9 → MIDI value 0-127 (scaled: `value * 127 / 9`)
 
-### Command Type 3: Resonance Control (11-20)
+### Command Type 3: Chorus Control (11-20)
 
 | Value | Decimal | Hex | Effect |
 |-------|---------|-----|--------|
-| 0 | 11 | 0x0B | No resonance (muted) |
-| 1 | 12 | 0x0C | Minimal resonance |
-| 2 | 13 | 0x0D | Light resonance |
-| 3 | 14 | 0x0E | Low-medium resonance |
-| 4 | 15 | 0x0F | Medium resonance |
-| 5 | 16 | 0x10 | Medium-high resonance |
-| 6 | 17 | 0x11 | High resonance |
-| 7 | 18 | 0x12 | Very high resonance |
-| 8 | 19 | 0x13 | Extreme resonance |
-| 9 | 20 | 0x14 | Maximum resonance (ringing) |
+| 0 | 11 | 0x0B | No chorus (dry) |
+| 1 | 12 | 0x0C | Minimal chorus |
+| 2 | 13 | 0x0D | Light chorus |
+| 3 | 14 | 0x0E | Low-medium chorus |
+| 4 | 15 | 0x0F | Medium chorus |
+| 5 | 16 | 0x10 | Medium-high chorus |
+| 6 | 17 | 0x11 | High chorus |
+| 7 | 18 | 0x12 | Very high chorus |
+| 8 | 19 | 0x13 | Extreme chorus |
+| 9 | 20 | 0x14 | Maximum chorus (thick, wide) |
 
-**MIDI Mapping**: Sent as MIDI CC#71 (Resonance)
+**MIDI Mapping**: Sent as MIDI CC#93 (Chorus Send Level)
 - Level 0-9 → MIDI value 0-127 (scaled: `value * 127 / 9`)
 
 ## DDJ-400 Control Mapping
@@ -97,9 +97,9 @@ An ultra-minimalist 1-byte protocol for real-time drum performance with dynamic 
 
 ### DECK 2 (Right Side)
 - **PADs 1-8**: Toms & Percussion triggers
-- **FILTER Knob**: Resonance control (CC#24 MSB)
-  - Turn left: Less resonance (muted)
-  - Turn right: More resonance (ringing sound)
+- **FILTER Knob**: Chorus control (CC#24 MSB)
+  - Turn left: Less chorus (dry sound)
+  - Turn right: More chorus (thick, wide sound)
 
 ## Implementation Details
 
@@ -124,7 +124,7 @@ send_value = level + 1
 serial.write(send_value.chr)
 ```
 
-**Resonance Control** (from DECK2 FILTER):
+**Chorus Control** (from DECK2 FILTER):
 ```ruby
 # Receive CC#24 (MSB) from DDJ-400
 cc_value = midi_bytes[2]  # 0-127
@@ -157,10 +157,10 @@ when 1..10
   midi_uart.write(midi_cc)
   
 when 11..20
-  # Resonance level → MIDI CC#71
+  # Chorus level → MIDI CC#93
   level = cmd - 11  # Convert to 0-9
   cc_value = (level * 127 / 9).to_i
-  midi_cc = 0xB9.chr + 71.chr + cc_value.chr
+  midi_cc = 0xB9.chr + 93.chr + cc_value.chr
   midi_uart.write(midi_cc)
 end
 ```
@@ -172,7 +172,7 @@ end
 | Message Size | 1 byte | 1 byte |
 | Drum Control | ✓ 21 drums | ✓ 21 drums |
 | Reverb Control | ✗ | ✓ 10 levels |
-| Resonance Control | ✗ | ✓ 10 levels |
+| Chorus Control | ✗ | ✓ 10 levels |
 | Complexity | Minimal | Still minimal |
 | Sync Issues | None | None |
 | Physical Control | Pads only | Pads + Knobs |
@@ -207,14 +207,14 @@ MIDI Module applies medium reverb
 ```
 Simultaneous Actions:
   - DECK1 PAD2 pressed (Snare)
-  - DECK2 FILTER adjusted (Resonance)
+  - DECK2 FILTER adjusted (Chorus)
 
 Sequence:
 [0x26] (Snare) → Immediate drum hit
     ↓
-[0x13] (Resonance Level 2) → Adjust sound character
+[0x13] (Chorus Level 2) → Adjust sound character
     ↓
-Result: Snare with light resonance
+Result: Snare with light chorus effect
 ```
 
 ## Error Handling
@@ -256,9 +256,9 @@ Result: Snare with light resonance
 ```
 All ranges are non-overlapping and intuitive.
 
-**Why CC#91 and CC#71?**
+**Why CC#91 and CC#93?**
 - CC#91: Standard MIDI Reverb Send Level
-- CC#71: Standard MIDI Resonance (Filter Q)
+- CC#93: Standard MIDI Chorus Send Level
 - Maximum compatibility with synthesizers
 
 ## Testing Results
@@ -272,7 +272,7 @@ All ranges are non-overlapping and intuitive.
 - ✓ Zero sync errors (maintained)
 - ✓ Rock-solid drum performance (maintained)
 - ✓ Expressive reverb control
-- ✓ Dynamic resonance adjustment
+- ✓ Dynamic chorus adjustment
 - ✓ No added complexity to protocol
 
 ## Conclusion
