@@ -118,6 +118,44 @@ Position:  -3    -2    -1    0     +1    +2    +3
 Ratio:    20%   40%   70%  100%   70%   40%   20%
 ```
 
+### Saturation Percentages (Brightness Modulation)
+
+Precise saturation control for smoothness:
+
+```
+Distance  Saturation  Usage
+--------  ----------  ------
+0 (center)   255     Full vibrancy
+±1            179     70% saturation
+±2            102     40% saturation
+±3            51      20% saturation
+```
+
+**Memory-efficient lookup** (rwc.rb):
+```ruby
+[
+  [pos, 255, bri],
+  [pos-1, 179, bri], [pos+1, 179, bri],
+  [pos-2, 102, bri], [pos+2, 102, bri],
+  [pos-3, 51, bri], [pos+3, 51, bri]
+].each do |p, sat_pct, b|
+  # Apply saturation: sat = sat_pct / 100.0
+  r = (c >> 16) & 0xFF
+  g = (c >> 8) & 0xFF
+  b_in = c & 0xFF
+
+  sat = sat_pct / 100.0
+  r = (r * sat + 255 * (1 - sat)).to_i
+  g = (g * sat + 255 * (1 - sat)).to_i
+  b_in = (b_in * sat + 255 * (1 - sat)).to_i
+
+  rgb = (r << 16) | (g << 8) | b_in
+  br = (rgb * b / 255) & 0xFFFFFF
+
+  $co[p] = $co[p] | br  # OR accumulation
+end
+```
+
 ### Color Calculation
 
 **Base color from acceleration**:
@@ -155,6 +193,70 @@ b_edge = b * sat + 255 * (1 - sat)
 ```
 
 Result: Center glows vibrant color, edges fade to white (flash-light effect)
+
+### Visual Effects Timeline
+
+#### Single PAD Hit (1 Kick at Note 36)
+
+```
+Timeline: 0ms (PAD press) → 60FPS fade
+Loop cnt: 0 → 15 → 30 → 45 → 60 → ...
+
+Time  0ms (pos1=0, pos2=26 from $lc):
+LED:  [■▓▒░  ... ▒▓■▓▒  ...]
+       0 1 2  3      26 27 28
+      Center   周囲   Random周囲
+
+Time  15ms (1st fade: ×97/100):
+LED:  [▓▒░▒   ... ▒▓▓▒░  ...]
+      97% → 3% decay applied
+
+Time  100ms (after 6 fades ≈ 18%残光):
+LED:  [░ ░░░  ... ░░░░░  ...]
+      Very dim, barely visible
+```
+
+#### Consecutive PAD Hits (Kick-Snare Combo)
+
+```
+Time  0ms: Kick (36) @ pos1=0, pos2=26
+LED:  [■▓▒░........................▒▓■▓▒............]
+       ↑                         ↑
+
+Time  5ms: Snare (38) @ pos1=1, pos2=18 (same $lc≈105)
+LED:  [■■▓▒▒.................▒▓■▓▒...▒▓■▓▒.....]
+       ↑↑                        ↑        ↑
+      Overlap!            Independent fades
+
+Time  15ms: Both fade 3%
+LED:  [▓▓▒░░.................▒▓▓▒░...▒▓▓▒░.....]
+       (Light accumulates at overlap!)
+
+Time  30ms: 2nd fade
+LED:  [▒▒░░░.................▒▓▓▒░...▒▓▓▒░.....]
+       (Kick dimmer than Snare - Snare hit more recent)
+```
+
+**Key insight**: OR演算でpos1と周囲が重なると、その部分がより明るく光る。複数PAD同時に光ると視覚的に盛り上がる！
+
+#### Full Performance with Color Dynamics
+
+```
+Initial (neutral, ATOM正対):
+All colors → White (R=G=B=255)
+
+Performer tilts forward (Y軸+):
+Kick colors → Green shift
+LED colors: [■ Green ▓▓ Pale green ░░ Almost white ...]
+
+Performer tilts right (X軸+):
+Snare colors → Cyan shift
+LED colors: [■ Cyan ▓▓ Pale cyan ░░ Almost white ...]
+
+Fast hand movements + ATOM rotation (Z軸+):
+Rapid color changes
+LED colors: Rainbow-like blinking across the strip
+```
 
 ### Fade Processing
 
@@ -351,9 +453,190 @@ end
 - Increase pseudo-random coefficient (use 11 instead of 7)
 - Add loop counter offset based on time seed
 
+## Tuning & Customization Guide
+
+### Brightness Adjustment
+
+**Too bright?** Reduce velocity scaling in `light_flash()`:
+```ruby
+# Original: bri = (vel * 2).clamp(0, 255)
+# Softer:
+bri = vel  # 1:1 mapping (50% reduction)
+# Or:
+bri = (vel * 1.5).clamp(0, 255)  # 25% reduction
+```
+
+**Too dim?** Increase scaling:
+```ruby
+# Brighter:
+bri = (vel * 3).clamp(0, 255)
+# Or reduce fade decay:
+$co[i] = $co[i] * 98 / 100  # 2% decay instead of 3%
+```
+
+### Saturation Tuning
+
+**More vibrant center, faster fade to white**:
+```ruby
+# Original: [255, 179, 102, 51]
+# More vibrant (tighter white convergence):
+[255, 200, 150, 100]
+```
+
+**More gradual fade**:
+```ruby
+# Original: [255, 179, 102, 51]
+# More gradual (smoother transition):
+[255, 160, 90, 30]
+```
+
+Modify saturation array in `light_flash()` loop definition.
+
+### Color Response Sensitivity
+
+**More responsive to tilt** (amplify delta):
+```ruby
+# Original: clamp to (-200, 200)
+dx = dx.clamp(-150, 150)  # Narrower range = more color change per tilt
+```
+
+**Less responsive** (dampen):
+```ruby
+# Original: clamp to (-200, 200)
+dx = dx.clamp(-300, 300)  # Wider range = subtler color change
+```
+
+### Pseudo-Random Distribution
+
+**Different pattern** (change coprime multiplier):
+```ruby
+# Original: pos2 = ($lc * 7 + note * 3) % 60
+# Alternative (use 11 instead of 7):
+pos2 = ($lc * 11 + note * 3) % 60  # Different pattern, still uniform
+# Or (use 13):
+pos2 = ($lc * 13 + note * 3) % 60  # Even sparser pattern
+```
+
+**Reduce collision likelihood**:
+```ruby
+# Original: pos2 = (pos2 + 15) % 60 if (pos1 - pos2).abs < 5
+# Larger offset:
+pos2 = (pos2 + 20) % 60 if (pos1 - pos2).abs < 5
+pos2 = (pos2 + 30) % 60 if (pos1 - pos2).abs < 10  # Double check
+```
+
+### Fade Interval Adjustment
+
+**Slower fade** (longer glow):
+```ruby
+# Original: if $lc % 15 == 0
+# Slower (≈100ms interval):
+if $lc % 100 == 0
+  # Reduce decay to 1% to compensate:
+  $co[i] = $co[i] * 99 / 100
+end
+```
+
+**Faster fade** (sharper effect):
+```ruby
+# Original: if $lc % 15 == 0
+# Faster (≈7.5ms interval):
+if $lc % 8 == 0
+  # Increase decay to 5%:
+  $co[i] = $co[i] * 95 / 100
+end
+```
+
+### Spread Range Adjustment
+
+**Wider spread** (more ambient glow):
+```ruby
+# Original: ±3 positions
+# Wider (±5):
+[
+  [pos, 255, bri],
+  [pos-1, 179, bri], [pos+1, 179, bri],
+  [pos-2, 102, bri], [pos+2, 102, bri],
+  [pos-3, 51, bri], [pos+3, 51, bri],
+  [pos-4, 25, bri], [pos+4, 25, bri],  # New
+  [pos-5, 10, bri], [pos+5, 10, bri]   # New
+].each do |p, sat_pct, b|
+  # ... same processing ...
+end
+```
+
+**Tighter spread** (focused flash):
+```ruby
+# Original: ±3 positions
+# Tighter (±1):
+[
+  [pos, 255, bri],
+  [pos-1, 179, bri], [pos+1, 179, bri]
+].each do |p, sat_pct, b|
+  # ... same processing ...
+end
+```
+
+## Performance Optimization Tips
+
+### Memory-Critical System
+If approaching Out of Memory, these reductions help:
+
+1. **Reduce loop count resolution**:
+   ```ruby
+   # Instead of tracking every 1ms, track every 2ms:
+   sleep_ms(2) instead of sleep_ms(1)
+   # Adjust fade interval: if $lc % 7 == 0 (was %15)
+   ```
+
+2. **Reduce LED count** (if hardware allows):
+   ```ruby
+   $co = Array.new(40, 0)  # 40 LEDs instead of 60
+   # Adjust bounds checks accordingly
+   ```
+
+3. **Disable accel sensor** (revert to white):
+   ```ruby
+   $mpu = nil  # get_color() returns 0xFFFFFF (white)
+   ```
+
+### CPU-Critical System
+If CPU usage high:
+
+1. **Skip accel reads every N fades**:
+   ```ruby
+   if $lc % 30 == 0  # Read every 30ms instead of per-loop
+     c = get_color
+   end
+   ```
+
+2. **Batch LED writes**:
+   ```ruby
+   # Show LED only every 2 loops (skip one)
+   if $lc % 2 == 0
+     $led.show_rgb(*rgb)
+   end
+   ```
+
+## Implementation Checklist for Modifications
+
+When modifying `rwc.rb` LED behavior:
+
+- [ ] Test saturation changes → visually verify color fade
+- [ ] Test brightness scaling → verify no overflow (>255)
+- [ ] Test collision avoidance → check pos1 vs pos2 distance
+- [ ] Test fade intervals → verify residual glow (not instant dark)
+- [ ] Test accel sensor → rotate ATOM and verify color change
+- [ ] Test spread range → verify ±N boundary conditions
+- [ ] Memory test → build and check for Out of Memory errors
+- [ ] Performance test → measure loop time vs 1ms target
+
 ## Future Extensions
 
 - **Gesture detection**: Swing ATOM for special effects
 - **Multi-axis rotation**: More complex color space
 - **Beat synchronization**: LED flash synced to audio BPM
 - **MIDI feedback**: Inverse mapping (LED input → MIDI out)
+- **Adaptive brightness**: Auto-reduce if CPU/memory pressure
+- **Pattern modes**: Switch between flash-light, pulse, strobe effects via CC
+- **Spectral analysis**: Audio frequency → LED color mapping
