@@ -1,219 +1,207 @@
-# PicoRuby フィンガードラムデモ - 本番版
-# LED光源 + IMU加速度 + MIDI音源 + PC通信統合
-# ATOM Matrix + 外付け60LED + MPU6886 + SAM2695
-
-require 'i2c'
-require 'mpu6886'
-require 'ws2812'
 require 'uart'
+require 'ws2812'
+require 'i2c'
 
-# グローバル変数群
-$i2c = nil
-$led = nil
 $pc = nil
 $md = nil
+$led = nil
 $mpu = nil
+$co = nil
+$bx = nil
+$lc = 0
+$cnt = 0
 
-$co = []
-$bx = [0, 0, 0]
-$cb = 0xFF8040
+DRUM_LED = {
+  36=>0, 38=>1, 42=>2, 46=>3, 49=>4, 51=>5, 39=>6, 56=>7,
+  41=>8, 43=>9, 45=>10, 47=>11, 48=>12, 50=>13, 54=>14, 52=>15
+}
 
-$midi_state = 0
-$midi_status = 0
-$midi_note = 0
+DRUM_NAMES = {
+  36=>"Kick", 38=>"Snare", 39=>"Clap", 41=>"LTom",
+  42=>"ClHH", 43=>"LMTom", 45=>"MTom", 46=>"OpHH",
+  47=>"MHTom", 48=>"HTom", 49=>"Crash", 50=>"HTom2",
+  51=>"Ride", 52=>"China", 54=>"Tamb", 56=>"Cowbell"
+}
 
 def init_hardware
-  puts "=== Hardware Init Start ==="
-  
-  puts "I2C init..."
-  $i2c = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
-  sleep_ms(100)
-  
-  puts "LED init..."
-  $led = WS2812.new(RMTDriver.new(22))
-  sleep_ms(100)
-  
-  puts "PC UART init..."
+  puts "Init..."
+
   $pc = UART.new(unit: :ESP32_UART0, baudrate: 115200)
-  sleep_ms(100)
-  
-  puts "MIDI UART init..."
-  $md = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 26, rxd_pin: 32)
-  sleep_ms(100)
-  
-  puts "MPU6886 init..."
-  $mpu = MPU6886.new($i2c)
-  $mpu.accel_range = MPU6886::ACCEL_RANGE_4G
-  sleep_ms(100)
-  
-  puts "LED buffer init..."
-  $co = Array.new(60, 0xFF8040)
-  
-  puts "Calibrating MPU..."
-  calibrate_mpu
-  
-  puts "MIDI Program Change..."
-  $md.write((0xC0).chr + (83).chr)
-  sleep_ms(100)
-  
-  puts "=== Hardware Init Complete ==="
-end
+  sleep_ms(50)
 
-def calibrate_mpu
-  sx = sy = sz = 0
-  
-  5.times do |i|
-    puts "  Cal #{i+1}/5"
-    a = $mpu.acceleration
-    sx += (a[:x] * 100).to_i
-    sy += (a[:y] * 100).to_i
-    sz += (a[:z] * 100).to_i
-    sleep_ms(100)
-  end
-  
-  $bx = [sx / 5, sy / 5, sz / 5]
-  puts "  Calibration done: #{$bx}"
-end
+  $md = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
+  sleep_ms(50)
 
-def update_color_from_accel
-  a = $mpu.acceleration
-  ac = [(a[:x] * 100).to_i, (a[:y] * 100).to_i, (a[:z] * 100).to_i]
-  
-  dx = ac[0] - $bx[0]
-  dy = ac[1] - $bx[1]
-  dz = ac[2] - $bx[2]
-  
-  # Accel → RGB (0-7 range)
-  rx = (dx + 200) >> 6
-  ry = (dy + 200) >> 6
-  rz = (dz + 200) >> 6
-  
-  rx = 0 if rx < 0
-  rx = 7 if rx > 7
-  ry = 0 if ry < 0
-  ry = 7 if ry > 7
-  rz = 0 if rz < 0
-  rz = 7 if rz > 7
-  
-  r = rx << 5
-  g = ry << 5
-  b = rz << 5
-  $cb = (r << 16) | (g << 8) | b
-  
-  # MIDI CC送信 (71=Filter, 74=Resonance, 91=Reverb)
-  cc_list = [71, 74, 91]
-  3.times do |k|
-    d = ac[k] - $bx[k]
-    v = ((d + 200) * 127 / 400).to_i
-    v = 0 if v < 0
-    v = 127 if v > 127
-    $md.write((0xB0).chr + cc_list[k].chr + v.chr)
-  end
-end
+  $led = WS2812.new(RMTDriver.new(22))
+  $co = Array.new(60, 0)
+  sleep_ms(50)
 
-def process_pc_midi
-  return unless $pc.bytes_available > 0
-  
-  dt = $pc.read
-  return unless dt && dt.length > 0
-  
-  # PCから受け取ったMIDIをMIDIモジュールにも流す
-  $md.write(dt)
-  
-  # ステートマシンでパース
-  i = 0
-  while i < dt.length
-    b = dt[i].ord
-    
-    case $midi_state
-    when 0
-      # ステータスバイト待機
-      if b == 0x90 || b == 0x80 || b == 0x99 || b == 0x89
-        $midi_status = b
-        $midi_state = 1
-      end
-    when 1
-      # ノートバイト待機
-      $midi_note = b
-      $midi_state = 2
-    when 2
-      # ベロシティ/値
-      if ($midi_status == 0x90 || $midi_status == 0x99) && b > 0
-        # Note On
-        if $midi_note >= 36 && $midi_note <= 84
-          pos = (($midi_note - 36) % 12) * 5 + (($midi_note - 36) / 12)
-          if pos >= 0 && pos < 60
-            $co[pos] = $cb
-          end
-        end
-      else
-        # Note Off
-        if $midi_note >= 36 && $midi_note <= 84
-          pos = (($midi_note - 36) % 12) * 5 + (($midi_note - 36) / 12)
-          if pos >= 0 && pos < 60
-            $co[pos] = 0
-          end
-        end
-      end
-      $midi_state = 0
+  begin
+    $mpu = MPU6886.new(i2c_unit: :ESP32_I2C0, sda_pin: 21, scl_pin: 25, freq: 100000)
+    $bx = [0, 0, 0]
+
+    5.times do
+      a = $mpu.acceleration
+      $bx[0] = (a[:x] * 100).to_i
+      $bx[1] = (a[:y] * 100).to_i
+      $bx[2] = (a[:z] * 100).to_i
+      sleep_ms(50)
     end
-    
-    i += 1
+    puts "Accel OK"
+  rescue
+    puts "Accel N/A"
+    $mpu = nil
+  end
+
+  $pc.clear_rx_buffer
+  sleep_ms(100)
+
+  if $pc.bytes_available > 0
+    $pc.read($pc.bytes_available)
+  end
+
+  $md.clear_rx_buffer
+  sleep_ms(50)
+
+  $md.write((0xC9).chr + (25).chr)
+  sleep_ms(100)
+
+  puts "Ready!"
+end
+
+def send_midi_cc(cc, val)
+  $md.write((0xB9).chr + cc.chr + val.chr)
+end
+
+def get_color
+  return 0xFFFFFF unless $mpu
+
+  begin
+    a = $mpu.acceleration
+    dx = (a[:x] * 100).to_i - $bx[0]
+    dy = (a[:y] * 100).to_i - $bx[1]
+    dz = (a[:z] * 100).to_i - $bx[2]
+
+    dx = dx.clamp(-200, 200)
+    dy = dy.clamp(-200, 200)
+    dz = dz.clamp(-200, 200)
+
+    r = ((dx + 200) * 255 / 400).to_i
+    g = ((dy + 200) * 255 / 400).to_i
+    b = ((dz + 200) * 255 / 400).to_i
+
+    (r << 16) | (g << 8) | b
+  rescue
+    0xFFFFFF
   end
 end
 
-def update_leds
-  $led.show_hex(*$co)
+def light_flash(pos, vel, c)
+  return if pos < 0 || pos >= 60
+
+  bri = (vel * 2).clamp(0, 255)
+
+  [
+    [pos, 255, bri],
+    [pos-1, 179, bri], [pos+1, 179, bri],
+    [pos-2, 102, bri], [pos+2, 102, bri],
+    [pos-3, 51, bri], [pos+3, 51, bri]
+  ].each do |p, sat_pct, b|
+    next if p < 0 || p >= 60
+
+    r = (c >> 16) & 0xFF
+    g = (c >> 8) & 0xFF
+    b_in = c & 0xFF
+
+    sat = sat_pct / 100.0
+    r = (r * sat + 255 * (1 - sat)).to_i
+    g = (g * sat + 255 * (1 - sat)).to_i
+    b_in = (b_in * sat + 255 * (1 - sat)).to_i
+
+    rgb = (r << 16) | (g << 8) | b_in
+    br = (rgb * b / 255) & 0xFFFFFF
+
+    $co[p] = $co[p] | br
+  end
+end
+
+def flash_drum(note, vel)
+  pos1 = DRUM_LED[note] || ((note - 36) % 44 + 16)
+  pos2 = ($lc * 7 + note * 3) % 60
+  pos2 = (pos2 + 15) % 60 if (pos1 - pos2).abs < 5
+
+  c = get_color
+
+  [pos1, pos2].each { |p| light_flash(p, vel, c) }
 end
 
 def fade_leds
-  i = 0
-  while i < 60
-    if $co[i] > 5
-      $co[i] = ($co[i] * 97 / 100)
-    else
-      $co[i] = 0
-    end
-    i += 1
+  60.times do |i|
+    $co[i] = $co[i] * 97 / 100 if $co[i] > 5
+    $co[i] = 0 if $co[i] <= 5
   end
 end
 
-# メイン処理
+def process_commands
+  return unless $pc.bytes_available > 0
+
+  while $pc.bytes_available > 0
+    data = $pc.read(1)
+    next unless data && data.length == 1
+
+    cmd = data[0].ord
+
+    case cmd
+    when 36..56
+      $md.write((0x99).chr + cmd.chr + (0x7F).chr)
+      flash_drum(cmd, 127)
+      $cnt += 1
+      name = DRUM_NAMES[cmd] || "?"
+      puts "[#{$cnt}] #{cmd}:#{name}"
+
+    when 1..10
+      lv = cmd - 1
+      cc_val = (lv * 127 / 9).to_i
+      cc_val = 127 if cc_val > 127
+      send_midi_cc(91, cc_val)
+
+    when 11..20
+      lv = cmd - 11
+      cc_val = (lv * 127 / 9).to_i
+      cc_val = 127 if cc_val > 127
+      send_midi_cc(93, cc_val)
+    end
+  end
+end
+
 begin
   init_hardware
-  
+
+  puts "=== LED Drum Performer ==="
+  puts "v2: Dual LED Flash"
   puts ""
-  puts "=== Demo Start ==="
-  puts "PC接続待ち..."
-  puts ""
-  
-  loop_count = 0
-  accel_update_interval = 5
-  
+
   loop do
-    loop_count += 1
-    
-    # 加速度更新（5ループごと）
-    if loop_count % accel_update_interval == 0
-      update_color_from_accel
+    $lc += 1
+
+    process_commands
+
+    if $lc % 15 == 0
+      fade_leds
     end
-    
-    # PC MIDI受信処理
-    process_pc_midi
-    
-    # LED更新
-    fade_leds
-    update_leds
-    
-    # デバッグ出力
-    if loop_count % 200 == 0
-      puts "Loop: #{loop_count}, Accel: #{$bx}, Color: 0x#{$cb.to_s(16)}"
+
+    rgb = []
+    60.times do |i|
+      c = $co[i]
+      rgb.push((c >> 16) & 0xFF)
+      rgb.push((c >> 8) & 0xFF)
+      rgb.push(c & 0xFF)
     end
-    
-    sleep_ms(20)
+    $led.show_rgb(*rgb)
+
+    sleep_ms(1)
   end
-  
+
 rescue => e
-  puts "Error: #{e.message}"
-  puts e.backtrace
+  puts "E: #{e.message}"
 end
