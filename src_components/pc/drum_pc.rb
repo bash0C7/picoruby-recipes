@@ -54,6 +54,30 @@ end
 serial = UART.open(serial_devices[device_num], 115200)
 puts "接続完了: #{serial_devices[device_num]}"
 
+# エフェクト・ベロシティ設定
+puts "\n【初期設定】"
+print "リバーブレベル (0-9, デフォルト5): "
+reverb_input = gets.chomp
+reverb_level = reverb_input.empty? ? 5 : reverb_input.to_i.clamp(0, 9)
+
+print "コーラスレベル (0-9, デフォルト5): "
+chorus_input = gets.chomp
+chorus_level = chorus_input.empty? ? 5 : chorus_input.to_i.clamp(0, 9)
+
+print "ベロシティ (1-127, デフォルト127): "
+velocity_input = gets.chomp
+velocity = velocity_input.empty? ? 127 : velocity_input.to_i.clamp(1, 127)
+
+# 初期化送信
+serial.write((reverb_level + 1).chr)
+sleep(0.05)
+serial.write((chorus_level + 11).chr)
+sleep(0.05)
+
+puts "\n✓ リバーブ: #{reverb_level}"
+puts "✓ コーラス: #{chorus_level}"
+puts "✓ ベロシティ: #{velocity}"
+
 puts "\n=== フィンガードラムモード開始 ==="
 puts "【DECK1 上段（a,s,d,f）】"
 puts "  a: Kick  s: Snare  d: Closed HH  f: Open HH"
@@ -103,8 +127,8 @@ begin
         # 複数キーを一気に送信（ポリフォニック）
         keys_pressed.each do |key|
           note = key_notes[key]
-          # Note On on Channel 10 (0x99) with velocity 127
-          note_on = [0x99, note, 127]
+          # Note On on Channel 10 (0x99) with velocity
+          note_on = [0x99, note, velocity]
           serial.write(note_on.map(&:chr).join)
         end
 
