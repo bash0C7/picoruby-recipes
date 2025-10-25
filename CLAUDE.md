@@ -20,6 +20,8 @@ PicoRubyとmrubyについてあなたは詳しいです。Rubyと書かれてい
 
 ## コマンド
 
+⚠️ **IMPORTANT**: Do NOT execute `rake` commands autonomously. User must run these commands manually.
+
 ```bash
 rake init        # 初回セットアップ
 rake build       # ビルド
@@ -40,15 +42,19 @@ rake check_env   # 環境確認
 
 **Gitコミット**
 - 英語、命令形
-- 編集後にサブエージェントでメッセージつくって自動コミット(/agents commit利用)
+- ⚠️ **IMPORTANT**: コミット時は**必ず**subagent `commit`を使用（/agents commit）
+- Claude Code自身が直接git commitコマンドを実行しないこと
 
 ## ワークフロー
 
-0. 調査はサブエージェントで高速かつ的確に行う(/agents explore利用)
+0. ⚠️ **IMPORTANT**: 以下の場合は**必ず**subagent `explore`を使用
+   - コード調査・探索時（/agents explore利用）
+   - plan mode時の現行コード確認
+   - 複雑な依存関係の理解
 1. 複雑な問題は「think hard」使用
 2. 小さく段階的に実装
 3. ハードウェアで動作確認
-4. 自動コミット
+4. 自動コミット（subagent commit使用）
 
 ## アーキテクチャ
 
