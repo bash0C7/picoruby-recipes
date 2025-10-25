@@ -1,53 +1,36 @@
 require 'uart'
 require 'io/console'
 
-puts "=== PicoRuby Demo - PC Finger Drum ==="
-puts "キーボード → MIDI → ATOM Matrix → MIDI Unit にょん！"
+puts "=== PicoRuby Finger Drum - PC Keyboard Version ==="
+puts "キーボード → UART → ATOM Matrix → MIDI Unit にょん！"
 
-# プロセスID表示と終了コマンド
-pid = $$
-puts "\n【プロセス情報】"
-puts "PID: #{pid}"
-puts "終了コマンド: kill -INT #{pid}"
-puts "\n"
-puts "チェケラッチョ！！演奏開始にょん！"
-
-# ===== ドラムキット定義 =====
-drum_kits = {
-  0 => "Standard Drum Kit",
-  8 => "Room Drum Kit",
-  16 => "Power Drum Kit",
-  24 => "Electronic Drum Kit",
-  25 => "TR-808 Drum Kit (Emulated)",
-  26 => "TR-909 Drum Kit (Emulated)",
-  32 => "Jazz Drum Kit",
-  40 => "Brush Drum Kit"
-}
-
-# General MIDI ドラムキット（Channel 10）
+# DECK構造のキーマッピング
 key_notes = {
-  # 下段（ドラム基本）
-  'z' => 36,  # Kick (Bass Drum)
-  'x' => 38,  # Snare
-  'c' => 42,  # Closed Hi-Hat
-  'v' => 46,  # Open Hi-Hat
-  'b' => 49,  # Crash Cymbal 1
-  'n' => 51,  # Ride Cymbal 1
-  'm' => 39,  # Hand Clap
-  
-  # 上段（タム・パーカッション）
-  'a' => 41,  # Low Tom
-  's' => 43,  # Low-Mid Tom
-  'd' => 45,  # Mid Tom
-  'f' => 47,  # Mid-Hi Tom
-  'g' => 48,  # Hi Tom
-  'h' => 50,  # High Tom
-  
-  # 数字キー
-  '1' => 56,  # Cowbell
-  '2' => 54,  # Tambourine
-  '3' => 52,  # Chinese Cymbal
-  '4' => 55   # Splash Cymbal
+  # ===== DECK1 =====
+  # PAD 1-4
+  'a' => 36,  # DECK1 PAD1: Kick (Bass Drum)
+  's' => 38,  # DECK1 PAD2: Snare
+  'd' => 42,  # DECK1 PAD3: Closed Hi-Hat
+  'f' => 46,  # DECK1 PAD4: Open Hi-Hat
+
+  # PAD 5-8
+  'z' => 49,  # DECK1 PAD5: Crash Cymbal
+  'x' => 51,  # DECK1 PAD6: Ride Cymbal
+  'c' => 39,  # DECK1 PAD7: Hand Clap
+  'v' => 56,  # DECK1 PAD8: Cowbell
+
+  # ===== DECK2 =====
+  # PAD 1-4
+  'g' => 41,  # DECK2 PAD1: Low Tom
+  'h' => 43,  # DECK2 PAD2: Low-Mid Tom
+  'j' => 45,  # DECK2 PAD3: Mid Tom
+  'k' => 47,  # DECK2 PAD4: Mid-Hi Tom
+
+  # PAD 5-8
+  'b' => 48,  # DECK2 PAD5: Hi Tom
+  'n' => 50,  # DECK2 PAD6: High Tom
+  'm' => 54,  # DECK2 PAD7: Tambourine
+  ',' => 52   # DECK2 PAD8: Chinese Cymbal
 }
 
 # シリアルデバイス接続
@@ -71,41 +54,21 @@ end
 serial = UART.open(serial_devices[device_num], 115200)
 puts "接続完了: #{serial_devices[device_num]}"
 
-# ===== ドラムキット選択 =====
-puts "\n【利用可能なドラムキット】"
-drum_kits.each do |prog, name|
-  puts "  #{prog.to_s.rjust(2)}: #{name}"
-end
-
-print "\nドラムキットを選択 (デフォルト 0): "
-kit_choice = gets.chomp.to_i
-kit_choice = 0 unless drum_kits.key?(kit_choice)
-
-# ドラムキット選択を送信 (Program Change on Channel 10 = 0xC9)
-serial.write([0xC9, kit_choice].map(&:chr).join)
-sleep(0.1)
-puts "✓ ドラムキット選択: #{drum_kits[kit_choice]}"
-
-# ===== プロトコル v2: 固定FX初期化 =====
-# Reverb level 5 → send value 6 (range: 1-10)
-reverb_value = 6
-serial.write(reverb_value.chr)
-sleep(0.05)
-
-# Chorus level 5 → send value 16 (range: 11-20)
-chorus_value = 16
-serial.write(chorus_value.chr)
-sleep(0.05)
-
-puts "✓ リバーブ初期化: レベル5（値=#{reverb_value}）"
-puts "✓ コーラス初期化: レベル5（値=#{chorus_value}）"
-
 puts "\n=== フィンガードラムモード開始 ==="
-puts "【下段】 z:キック x:スネア c:クローズHH v:オープンHH b:クラッシュ n:ライド m:クラップ"
-puts "【上段】 a-h:タム各種"
-puts "【数字】 1:カウベル 2:タンバリン 3:チャイナ 4:スプラッシュ"
-puts "同時押し対応！ キック+スネア等、複数キーを同時に叩けますにょん！"
-puts "Ctrl+C で終了\n"
+puts "【DECK1 上段（a,s,d,f）】"
+puts "  a: Kick  s: Snare  d: Closed HH  f: Open HH"
+puts ""
+puts "【DECK1 下段（z,x,c,v）】"
+puts "  z: Crash  x: Ride  c: Clap  v: Cowbell"
+puts ""
+puts "【DECK2 上段（g,h,j,k）】"
+puts "  g: Low Tom  h: Low-Mid Tom  j: Mid Tom  k: Mid-Hi Tom"
+puts ""
+puts "【DECK2 下段（b,n,m,）】"
+puts "  b: Hi Tom  n: High Tom  m: Tambourine  ,: Chinese Cymbal"
+puts ""
+puts "同時押し対応！ a+z で キック+クラッシュ等、複数キーを同時に叩けますにょん！"
+puts "q キーで終了\n"
 puts "チェケラッチョ！！演奏開始にょん！"
 
 STDIN.raw!
@@ -115,20 +78,26 @@ begin
     # バッファに溜まった全キーを読み取る(sec単位タイムアウト）
     if IO.select([STDIN], nil, nil, 0.01)
       keys_pressed = []
-      
+
       # バッファが空になるまで全キー読み取り（同時押し検知）
       loop do
         key = STDIN.read_nonblock(1) rescue nil
         break unless key
-        
+
         key = key.downcase
-        
+
+        # q キーで終了
+        if key == 'q'
+          print "\r\nアディオス！にょん！\r\n"
+          exit 0
+        end
+
         # 有効なキーのみ収集
         if key_notes[key]
           keys_pressed << key
         end
       end
-      
+
       # 収集したキーをすべて同時送信（ドラムワンショット）
       if keys_pressed.any?
         # 複数キーを一気に送信（ポリフォニック）
@@ -138,15 +107,19 @@ begin
           note_on = [0x99, note, 127]
           serial.write(note_on.map(&:chr).join)
         end
-        
-        # デバッグ表示
+
+        # デバッグ表示（\r\nで改行を明示的に指定）
         keys_str = keys_pressed.map(&:upcase).join('+')
         notes_str = keys_pressed.map { |k| key_notes[k] }.join('+')
-        puts "♪ #{keys_str} → #{notes_str}"
+        print "♪ #{keys_str} → #{notes_str}\r\n"
       end
     end
   end
 
+rescue Interrupt
+  print "\r\nプロセス中断にょん！\r\n"
+  exit 0
 rescue => e
-  cleanup
+  print "\r\nエラー: #{e.message}\r\n"
+  exit 1
 end
