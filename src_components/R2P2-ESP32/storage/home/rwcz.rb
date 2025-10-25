@@ -14,7 +14,7 @@ sleep_ms(10)
 
 # LED初期化
 $led=WS2812.new(RMTDriver.new(22))
-$co=Array.new(60, 0x101010)  # ベース照明: 全て薄暗い白
+$co=Array.new(60, 0x030303)  # ベース照明: 全て薄暗い白
 sleep_ms(10)
 
 # 加速度センサー初期化
@@ -43,7 +43,7 @@ $prev_accel=[0,0,0]            # 前回加速度 [X,Y,Z]
 $current_color=[0,0]           # 現在色 [R,B]
 
 puts "=== New LED Strategy ==="
-puts "Base: 0x101010 (dim white)"
+puts "Base: 0x030303 (very dim white)"
 puts "History: 5 PADs green highlight"
 puts "Accel: Speed->Red, Up->Blue"
 
@@ -65,7 +65,10 @@ loop do
       $pad_history[$history_idx] = cmd
       $history_idx = ($history_idx + 1) % 5
 
-      puts "PAD:#{cmd} history=#{$pad_history.compact.inspect}"
+      # 履歴表示（nilを除外）
+      hist = []
+      $pad_history.each {|h| hist << h if h}
+      puts "PAD:#{cmd} history=#{hist.inspect}"
 
     when 1..10   # リバーブ
       $md.write((0xB9).chr + 91.chr + (((cmd-1)*127/9).to_i).chr)
@@ -106,7 +109,7 @@ loop do
       b = $current_color[1]
     else
       # 履歴にないPAD → 白弱（ベース照明）
-      r = g = b = 0x10
+      r = g = b = 0x03
     end
 
     # ビット演算でRGB合成
