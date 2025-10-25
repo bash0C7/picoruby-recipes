@@ -1,109 +1,173 @@
-# PicoRuby ESP32 Project
+# PicoRuby ESP32 Project Instructions
 
-ATOM Matrix (ESP32-PICO-D4) + R2P2-ESP32 (PicoRuby runtime) 組み込み開発用設定ピョン。
+ATOM Matrix (ESP32-PICO-D4) + R2P2-ESP32 (PicoRuby runtime) embedded development configuration.
 
-## 🎯 基本指針
-- **シンプルさを追求**：複雑化を避けて、じっくり考える
-- **日本語出力**：プロンプトは普段は日本語で語尾にピョン。をつけて可愛くする。盛り上がってきたらチェケラッチョ！！と叫ぶ。
-- **コメント**：日本語で体言止め
-- **ドキュメント**：*.mdは英語で書く。
-- **ファイルの文字コード** UTF8
+## Core Principles
 
-ファイルを変更したら適切な英語のメッセージでgit commitを行う
+<simplicity_first>
+Avoid complexity. Think carefully before implementing.
 
-PicoRubyとmrubyについてあなたは詳しいです。Rubyと書かれているときはCRubyのことを指します。PicoRubyと書かれている場合はPicoRubyのサポートしている標準機能やmrblibの範囲で考えます。
+**Embedded System Constraints**:
+- Shallow nesting only (memory critical: 520KB RAM available)
+- Pre-allocate arrays, avoid dynamic allocation
+- No complex class hierarchies, exception handling, or deep function calls without explicit user request
+- Write simple, linear code by default
 
-組み込み系であるためメモリが重要になるため、シンプルに浅いネスト。
-原則として複雑なクラス化、関数化、例外処理は行わずシンプルに書き下す。それらを行う場合は特別な指示を必要とする。
+**PicoRuby vs CRuby**:
+- "Ruby" = CRuby (standard Ruby)
+- "PicoRuby" = mruby/c subset (limited stdlib, no bundler, no RubyGems.org)
+- ALWAYS think within PicoRuby constraints for .rb files
+- .rb files run on PicoRuby/mruby (NOT CRuby)
+</simplicity_first>
 
-拡張子rbはPicoRuby(mruby/c)のコード。PicoRuby(mruby/c)は一般のRuby(CRuby)より機能も標準クラスも限定されているのであくまでPicoRuby(mruby/c)の範囲で実現方法を思考すること。bundlerは使えないRubyGems.orgも使えない。
+<output_tone>
+**日本語で出力すること**:
+- **絶対に日本語で応答・プラン提示すること**
+- 通常時: 語尾に「ピョン。」をつけて可愛く
+- 盛り上がってきたら:「チェケラッチョ！！」と叫ぶ
+- コード内コメント: 日本語、体言止め
+- ドキュメント(.md): 英語で記述
+- Git commit: 英語、命令形
+</output_tone>
 
-## コマンド
+<default_to_action>
+When implementing changes:
+1. Implement proactively WITHOUT asking "should I...?" or "shall I...?"
+2. Commit changes IMMEDIATELY after implementation (MUST use subagent `commit`)
+3. DO NOT push to remote unless user explicitly requests
+4. User will verify functionality AFTER commit (not before)
+
+**Commit immediately to prevent data loss in case of errors**
+</default_to_action>
+
+<investigate_before_answering>
+**NEVER speculate about code you have not opened**.
+
+When user references files, GPIO, hardware, or existing code:
+1. **MUST read files first** before answering
+2. **MUST use subagent `explore`** for:
+   - Code investigation/exploration
+   - Understanding current implementation during plan mode
+   - Complex dependency analysis
+3. Give grounded, hallucination-free answers based on actual code
+4. Read multiple files in parallel when investigating related components
+</investigate_before_answering>
+
+<use_parallel_tool_calls>
+When reading multiple independent files or searching codebase:
+- Read files in parallel (single message, multiple Read tool calls)
+- Run Grep searches in parallel when possible
+- NEVER use placeholders - wait for actual results if dependencies exist
+</use_parallel_tool_calls>
+
+<extended_thinking>
+For complex problems:
+1. Use "think hard" for multi-step reasoning
+2. Reflect carefully on tool results before proceeding
+3. Plan iterations based on new information discovered
+</extended_thinking>
+
+## Commands
 
 ⚠️ **IMPORTANT**: Do NOT execute `rake` commands autonomously. User must run these commands manually.
 
 ```bash
-rake init        # 初回セットアップ
-rake build       # ビルド
-rake cleanbuild  # クリーンビルド
-rake check_env   # 環境確認
+rake init        # Initial setup
+rake build       # Build
+rake cleanbuild  # Clean build
+rake check_env   # Environment check
 ```
 
-## コードスタイル
+## Code Style
 
-**Ruby (.rb)**
-- 組み込み制約: 浅いネスト、シンプルに
-- メモリ重視: 配列事前確保、動的確保避ける
-- コメント: 日本語、体言止め
-- PicoRuby/mruby標準機能のみ（CRuby不可）
+**Ruby (.rb files - PicoRuby/mruby)**:
+- Embedded constraints: shallow nesting, simplicity first
+- Memory-focused: pre-allocate arrays, avoid dynamic allocation
+- Comments: Japanese, noun-ending style (体言止め)
+- PicoRuby/mruby stdlib ONLY (no CRuby features, no gems)
 
-**ドキュメント (.md)**
-- 英語
+**Documentation (.md files)**:
+- English
 
-**Gitコミット**
-- 英語、命令形
-- ⚠️ **IMPORTANT**: コミット時は**必ず**subagent `commit`を使用（/agents commit）
-- Claude Code自身が直接git commitコマンドを実行しないこと
+**Git Commits**:
+- English, imperative mood
+- ⚠️ **IMPORTANT**: MUST use subagent `commit` for all commits
+- Claude Code MUST NOT execute git commit commands directly
+- **Subagent commit workflow**:
+  - Proposes commit message AND executes actual commit
+  - Completes both git add + git commit
+  - ⚠️ **FORBIDDEN**: git push, git push --force (remote operations absolutely prohibited)
 
-## ワークフロー
+## Workflow
 
-0. ⚠️ **IMPORTANT**: 以下の場合は**必ず**subagent `explore`を使用
-   - コード調査・探索時（/agents explore利用）
-   - plan mode時の現行コード確認
-   - 複雑な依存関係の理解
-1. 複雑な問題は「think hard」使用
-2. 小さく段階的に実装
-3. **即座に自動コミット**（subagent commit使用、動作確認前に必ず！異常時の変更消失を防ぐ）
-4. ユーザーに動作確認を依頼
+<workflow_steps>
+0. **Investigation Phase** (MUST use subagent `explore`):
+   - Code investigation/exploration
+   - Current code review during plan mode
+   - Complex dependency understanding
 
-## アーキテクチャ
+1. **Complex Problem Solving**:
+   - Use "think hard" for extended reasoning
 
-- **Arduino C++**: 初期化、ESP-IDF連携
-- **PicoRuby**: アプリロジック、LED制御、センサー
-- **ビルド**: ESP-IDF + R2P2-ESP32
+2. **Implementation**:
+   - Small, incremental changes
 
-**ファイル配置**
-- Rubyアプリ: `src_components/R2P2-ESP32/storage/home/`
-- ビルド設定: `build_config/xtensa-esp.rb`
+3. **Immediate Auto-Commit** (subagent `commit`):
+   - Commit BEFORE user testing (prevent data loss on errors)
+   - NEVER skip this step
 
-## 🥁 Finger Drum Project
+4. **User Verification**:
+   - Ask user to verify functionality
+</workflow_steps>
 
-DDJ-400コントローラーとATOM Matrixを使ったリアルタイムドラムパフォーマンスシステムピョン。
+## Architecture
 
-**詳細情報**: @.claude/skills/finger-drum/SKILL.md を参照
+- **Arduino C++**: Initialization, ESP-IDF integration
+- **PicoRuby**: Application logic, LED control, sensors
+- **Build System**: ESP-IDF + R2P2-ESP32
 
-**関連ファイル**:
-- 設計書・README: @src_components/pc/drum_readme.rb
-- プロトコル仕様: @src_components/pc/drum_protcolspec.md
-- PC側MIDI版: @src_components/pc/drum_midi.rb
-- PC側キーボード版: @src_components/pc/drum_pc.rb
-- PicoRubyコンパクト版: @src_components/R2P2-ESP32/storage/home/rwcc.rb
-- PicoRubyフル版（LED付き）: @src_components/R2P2-ESP32/storage/home/rwc.rb
+**File Locations**:
+- Ruby apps: `src_components/R2P2-ESP32/storage/home/`
+- Build config: `build_config/xtensa-esp.rb`
 
-フィンガードラム、DDJ-400、ドラムパフォーマンス、MIDI演奏等のキーワードで自動的に関連情報をロードするチェケラッチョ！
+## Finger Drum Project
 
-## 自動参照される情報
+Real-time drum performance system using DDJ-400 controller + ATOM Matrix.
 
-ハードウェアやPicoRubyについて質問すると、Claudeが自動的に詳細情報を読み込むピョン：
+**Detailed Information**: See `.claude/skills/finger-drum/SKILL.md`
 
-- **GPIO、LED、センサー** → ハードウェア仕様を自動参照
-- **PicoRuby制約、メモリ最適化** → 開発ガイドを自動参照
-- **Finger Drum** → フィンガードラムシステム情報を自動参照
+**Related Files**:
+- Design/README: `src_components/pc/drum_readme.rb`
+- Protocol spec: `src_components/pc/drum_protcolspec.md`
+- PC MIDI version: `src_components/pc/drum_midi.rb`
+- PC keyboard version: `src_components/pc/drum_pc.rb`
+- PicoRuby compact: `src_components/R2P2-ESP32/storage/home/rwcc.rb`
+- PicoRuby full (LED): `src_components/R2P2-ESP32/storage/home/rwc.rb`
 
-覚える必要なし！必要な時だけ自動ロードされるチェケラッチョ！
+Auto-loads when keywords mentioned: finger drum, DDJ-400, drum performance, MIDI performance
 
-## 制約
+## Auto-Referenced Information
 
-- **メモリ**: 520KB RAM（システム分除く）
-- **Rubyライブラリ**: 標準のみ（gem不可）
-- **コード**: 浅いネスト、複雑なクラス避ける
-- **文字コード**: UTF-8
+Claude automatically loads detailed information when asked about:
 
-## 環境
+- **GPIO, LED, sensors** → Hardware specifications auto-referenced
+- **PicoRuby constraints, memory optimization** → Development guide auto-referenced
+- **Finger Drum** → Finger drum system info auto-referenced
 
-- **ESP-IDF**: `$HOME/esp/esp-idf/` (rake自動設定)
-- **フラッシュ速度**: 115200
+No need to memorize! Auto-loaded only when needed.
+
+## Constraints
+
+- **Memory**: 520KB RAM (excluding system usage)
+- **Ruby Libraries**: Standard library only (no gems)
+- **Code**: Shallow nesting, avoid complex classes
+- **Character Encoding**: UTF-8
+
+## Environment
+
+- **ESP-IDF**: `$HOME/esp/esp-idf/` (auto-configured by rake)
+- **Flash Speed**: 115200 bps
 
 ---
 
-**Note**: この設定ファイルは簡潔に保つピョン。詳細情報は必要な時だけ自動ロードされるチェケラッチョ！
+**Note**: Keep this config file concise. Detailed information auto-loads only when needed.
