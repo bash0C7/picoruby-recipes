@@ -102,17 +102,45 @@ loop do
   # ベース照明で初期化
   60.times {|idx| led_colors[idx] = 0x030303}
 
-  # 履歴にあるPADのLED位置を緑に点灯（疑似ランダムで3-5個の位置）
-  pad_history.each do |pad_note|
+  # 履歴にあるPADのLED位置を緑に点灯（履歴位置もファクター）
+  5.times do |hist_pos|
+    pad_note = pad_history[hist_pos]
     next unless pad_note
 
-    # 疑似ランダムでLED位置を3-5個生成
-    seed_val = pad_note * 7
+    # 疑似ランダムでLED位置を3-5個生成（履歴位置も加味）
+    seed_val = pad_note * 7 + hist_pos * 11
     num_positions = 3 + (pad_note % 3)
 
     num_positions.times do |pos_idx|
-      led_pos = (seed_val + pos_idx * 13 + pos_idx * pos_idx * 5) % 60
-      led_colors[led_pos] = (color_red<<16) | (0xFF<<8) | color_blue
+      # 中心LED位置
+      center_pos = (seed_val + pos_idx * 13 + pos_idx * pos_idx * 5) % 60
+      center_color = (color_red<<16) | (0xFF<<8) | color_blue
+
+      # 周囲5個を輝度落として点灯（中心が最優先）
+      5.times do |spread_idx|
+        spread_pos = (center_pos + spread_idx - 2) % 60
+
+        # 輝度計算（中心=100%, ±1=70%, ±2=40%）
+        brightness = spread_idx == 2 ? 0xFF : (spread_idx == 1 || spread_idx == 3 ? 0xB3 : 0x66)
+
+        # 既存の色と比較して明るい方を採用（強い光優先）
+        new_r = ((color_red * brightness) >> 8)
+        new_g = ((0xFF * brightness) >> 8)
+        new_b = ((color_blue * brightness) >> 8)
+        new_color = (new_r<<16) | (new_g<<8) | new_b
+
+        # 既存色のRGB成分を取り出し
+        old_r = (led_colors[spread_pos] >> 16) & 0xFF
+        old_g = (led_colors[spread_pos] >> 8) & 0xFF
+        old_b = led_colors[spread_pos] & 0xFF
+
+        # 各成分の最大値を採用（明るい方優先）
+        final_r = new_r > old_r ? new_r : old_r
+        final_g = new_g > old_g ? new_g : old_g
+        final_b = new_b > old_b ? new_b : old_b
+
+        led_colors[spread_pos] = (final_r<<16) | (final_g<<8) | final_b
+      end
     end
   end
 
