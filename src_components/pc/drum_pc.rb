@@ -108,6 +108,7 @@ begin
 
         # q キーで終了
         if key == 'q'
+          STDIN.cooked!
           print "\r\nアディオス！にょん！\r\n"
           exit 0
         end
@@ -136,9 +137,14 @@ begin
   end
 
 rescue Interrupt
+  STDIN.cooked!
   print "\r\nプロセス中断にょん！\r\n"
   exit 0
 rescue => e
+  STDIN.cooked!
   print "\r\nエラー: #{e.message}\r\n"
   exit 1
+ensure
+  # 必ずターミナルをcookedモードに戻す
+  STDIN.cooked! rescue nil
 end
