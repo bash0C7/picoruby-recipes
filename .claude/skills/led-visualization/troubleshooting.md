@@ -1,12 +1,12 @@
-# LED Troubleshooting Guide
+# LED Troubleshooting Guide v2.0
 
-Solutions for common LED visualization issues in rwc.rb.
+Solutions for common LED visualization issues in rwc.rb / rwcz.rb (New PAD History Strategy).
 
 ## Hardware Issues
 
 ### Problem: LEDs Not Lighting at All
 
-**Symptom:** No light from any LED, even during drum hits.
+**Symptom:** No light from any LED, even base lighting missing on startup.
 
 **Diagnosis steps:**
 
@@ -21,7 +21,7 @@ Solutions for common LED visualization issues in rwc.rb.
 
 2. **Test RMTDriver initialization**
    ```ruby
-   # In rwc.rb init_hardware():
+   # In rwcz.rb init section (after line 16):
    puts "Creating LED..."
    $led = WS2812.new(RMTDriver.new(22))
    puts "LED created: #{$led.class}"
@@ -30,10 +30,12 @@ Solutions for common LED visualization issues in rwc.rb.
 
 3. **Send test pattern**
    ```ruby
-   # After init, add:
+   # After init, add (before loop):
+   puts "Testing LED with red..."
    test_color = Array.new(60, 0xFF0000)  # All red
    $led.show_hex(*test_color)
-   sleep_ms(1000)
+   sleep_ms(2000)  # Hold for 2 seconds
+   puts "Test done, starting main loop"
    ```
    - If LEDs light red: Hardware OK, issue in main loop
    - If still dark: RMTDriver or power issue
@@ -43,9 +45,9 @@ Solutions for common LED visualization issues in rwc.rb.
 | Scenario | Fix |
 |----------|-----|
 | LEDs don't light with test | Check 5V power to strip |
-| LEDs light with test, not during performance | Loop code overwrites color (check fade) |
+| LEDs light with test, not during main loop | Loop code overwrites color (check LED update section) |
 | Some LEDs dark, some light | LED strip wiring broken (replace segment) |
-| Random colors instead of expected | Data line signal issues (shorten cable) |
+| Random colors instead of expected | Data line signal issues (shorten cable, add 330Ω resistor) |
 
 ---
 
@@ -57,21 +59,26 @@ Solutions for common LED visualization issues in rwc.rb.
 
 1. **Check UART interference**
    ```ruby
-   # Add timing check:
-   start = Time.now
-   $pc_uart.read  # May block
-   elapsed = Time.now - start
-   puts "UART read took: #{elapsed}ms"
+   # Add timing check in UART section:
+   start_time = $tick
+   while $pc.bytes_available > 0
+     data = $pc.read(1)
+     # ... process ...
+   end
+   elapsed = $tick - start_time
+   puts "UART took: #{elapsed}ms" if elapsed > 5
    ```
    - If > 5ms: PC UART blocking main loop
 
 2. **Check I2C blocking**
    ```ruby
-   # Time accelerometer read:
-   start = Time.now
-   a = $mpu.acceleration
-   elapsed = Time.now - start
-   puts "Accel read: #{elapsed}ms"
+   # Time accelerometer read (line 78):
+   if $tick % 15 == 0 && $u
+     start_time = $tick
+     a = $u.acceleration
+     elapsed = $tick - start_time
+     puts "Accel read: #{elapsed}ms" if elapsed > 10
+   end
    ```
    - If > 10ms: I2C communication issue
 
@@ -79,82 +86,106 @@ Solutions for common LED visualization issues in rwc.rb.
 
 1. **Skip accel read more frequently**
    ```ruby
-   if $lc % 60 == 0  # Read every 60ms instead of every loop
-     c = get_color
+   if $tick % 30 == 0 && $u  # Was 15 (read every 30ms instead)
+     # ... accel code ...
    end
    ```
 
 2. **Use non-blocking UART read**
    ```ruby
-   # Instead of:
-   data = $pc_uart.read  # May block
-
-   # Use:
-   if $pc_uart.bytes_available > 0
-     data = $pc_uart.read(1)  # Read 1 byte only
+   # Already non-blocking in rwcz.rb (line 54):
+   while $pc.bytes_available > 0  # ✓ Only reads if data available
+     data = $pc.read(1)
    end
    ```
 
 3. **Reduce WS2812 update rate**
    ```ruby
-   # In main loop:
-   if $lc % 2 == 0  # Update every 2ms instead of 1ms
-     $led.show_rgb(*rgb)
+   # Line 117: Update every 2ms instead of 1ms
+   if $tick % 2 == 0
+     $led.show_hex(*$co)
    end
    ```
 
 ---
 
-## Color Issues
+## Base Lighting Issues
 
-### Problem: Colors Not Responding to Tilt
+### Problem: No Base Lighting (All LEDs Off When Not Playing)
 
-**Symptom:** LEDs always white, regardless of ATOM movement.
+**Symptom:** LEDs are completely off when no PADs are being hit.
 
 **Diagnosis:**
 
-1. **Check accelerometer initialization**
+1. **Check base lighting initialization**
    ```ruby
-   # In init_hardware():
-   begin
-     $mpu = MPU6886.new(i2c_unit: :ESP32_I2C0, sda_pin: 21, scl_pin: 25, freq: 100000)
-     puts "MPU initialized: #{$mpu.class}"
-   rescue => e
-     puts "MPU init failed: #{e.message}"
-     $mpu = nil
-   end
+   # Line 17 in rwcz.rb:
+   $co=Array.new(60, 0x101010)  # Should be 0x101010, NOT 0
+   puts "Base lighting: #{$co[0].to_s(16)}"  # Should print "101010"
    ```
 
-2. **Check I2C lines**
-   - GPIO 21 (SDA) connected to MPU6886 SDA?
-   - GPIO 25 (SCL) connected to MPU6886 SCL?
-   - 4.7k pullup resistors present?
-   ```bash
-   # Check I2C address:
-   # MPU6886 default: 0x68
-   # If custom board: check datasheet
+2. **Check LED update loop**
+   ```ruby
+   # Line 109: Ensure base lighting set correctly
+   puts "LED[#{i}] base: r=#{r} g=#{g} b=#{b}" if i == 0 && $tick % 100 == 0
+   # Should show: r=16 g=16 b=16 (0x10 = 16)
    ```
 
-3. **Test acceleration readings**
-   ```ruby
-   # In main loop:
-   if $lc % 100 == 0
-     a = $mpu.acceleration
-     puts "X:#{a[:x]}, Y:#{a[:y]}, Z:#{a[:z]}"
-   end
-   ```
-   - Should show values like -1.0 to 1.0
-   - Should change when ATOM tilted
+**Solutions:**
 
-4. **Check color calculation**
+| Root Cause | Fix |
+|-----------|-----|
+| Array initialized to 0 | Change line 17: `Array.new(60, 0x101010)` |
+| LED update overwrites base | Verify line 109 sets `r = g = b = 0x10` |
+| Base too dim to see | Increase to `0x20` or `0x30` (see @tuning.md) |
+
+---
+
+### Problem: Base Lighting Too Bright/Dim
+
+**Symptom:** All LEDs blinding or barely visible.
+
+**Solution:** See @tuning.md section "Base Lighting Control"
+
+Quick fixes:
+```ruby
+# Too bright → reduce (line 109):
+r = g = b = 0x08  # Was 0x10
+
+# Too dim → increase (line 109):
+r = g = b = 0x20  # Was 0x10
+```
+
+---
+
+## PAD History Issues
+
+### Problem: Green Highlight Not Appearing
+
+**Symptom:** Hit PAD but corresponding LED stays white, doesn't turn green.
+
+**Diagnosis:**
+
+1. **Check PAD history updates**
    ```ruby
-   # Trace get_color():
-   def get_color_debug
-     return 0xFFFFFF unless $mpu
-     a = $mpu.acceleration
-     dx = (a[:x] * 100).to_i - $bx[0]
-     puts "dx=#{dx}"  # Should be non-zero when tilted
-     ...
+   # Line 68: Add debug output
+   puts "PAD:#{cmd} history=#{$pad_history.compact.inspect}"
+   # Should show PAD note added to history
+   ```
+
+2. **Check DRUM_LED mapping**
+   ```ruby
+   # Line 7: Verify DRUM_LED array
+   puts "PAD 36 → LED #{DRUM_LED[0]}"  # Should print "0"
+   puts "PAD 38 → LED #{DRUM_LED[2]}"  # Should print "1"
+   ```
+
+3. **Check history lookup in LED update**
+   ```ruby
+   # Line 100-102: Add debug
+   if i == 0 && $tick % 100 == 0
+     pad_idx = DRUM_LED.index(i)
+     puts "LED[0] → PAD idx=#{pad_idx}, in history? #{$pad_history.include?(36 + pad_idx) if pad_idx}"
    end
    ```
 
@@ -162,262 +193,192 @@ Solutions for common LED visualization issues in rwc.rb.
 
 | Root Cause | Fix |
 |-----------|-----|
-| MPU not initialized | Check I2C wiring, address |
-| Calibration wrong | Run 5-point baseline again |
-| Clamp range wrong | Adjust clamp: ±200 → ±150 or ±300 |
-| get_color returns white | Check return value in rescue block |
+| History not updated | Verify line 65-66 executes when PAD hit |
+| DRUM_LED mapping wrong | Check line 7 array (PAD 36→LED 0, 38→LED 1, etc.) |
+| History check failing | Verify line 102: `$pad_history.include?(36 + pad_idx)` |
+| Green value wrong | Verify line 105: `g = 0xFF` |
 
 ---
 
-### Problem: Wrong Colors (Inverted Axes)
+### Problem: History Not Updating (Same PADs Always Green)
 
-**Symptom:** Tilt forward → magenta (expect green), tilt right → yellow (expect cyan).
+**Symptom:** Hit new PADs but old PADs stay green, history not rotating.
 
 **Diagnosis:**
 
-1. **Identify which axis is wrong**
-   - Tilt forward (Y): expect green (0x00FF00), get magenta (0xFF00FF)?
-     → Y axis inverted or misassigned
-   - Tilt right (X): expect cyan (0x00FFFF), get yellow (0xFFFF00)?
-     → X axis inverted or misassigned
-
-2. **Check axis mapping** in `get_color()`:
+1. **Check ring buffer logic**
    ```ruby
-   r = ((dx + 200) * 255 / 400).to_i  # X → Red
-   g = ((dy + 200) * 255 / 400).to_i  # Y → Green
-   b = ((dz + 200) * 255 / 400).to_i  # Z → Blue
+   # Line 65-66:
+   $pad_history[$history_idx] = cmd
+   $history_idx = ($history_idx + 1) % 5
+   puts "History idx: #{$history_idx}, history: #{$pad_history.inspect}"
+   ```
+   - $history_idx should cycle 0→1→2→3→4→0...
+
+2. **Check modulo matches array size**
+   ```ruby
+   # If history size changed:
+   $pad_history=Array.new(7, nil)  # Size 7
+   $history_idx = ($history_idx + 1) % 5  # ❌ Still using 5!
+   # Should be:
+   $history_idx = ($history_idx + 1) % 7  # ✓ Match size
    ```
 
 **Solutions:**
 
-1. **Invert one axis** (negate delta):
+1. **Fix ring buffer modulo**
    ```ruby
-   # If Y is inverted:
-   g = ((-dy + 200) * 255 / 400).to_i  # Negate dy
-
-   # If X is inverted:
-   r = ((-dx + 200) * 255 / 400).to_i
+   # Line 66: Ensure modulo matches history size
+   HISTORY_SIZE = 5
+   $pad_history=Array.new(HISTORY_SIZE, nil)  # Line 40
+   $history_idx = ($history_idx + 1) % HISTORY_SIZE  # Line 66
    ```
 
-2. **Swap axes** (remap completely):
+2. **Reset history if corrupted**
    ```ruby
-   # If axes need swapping (X↔Y):
-   r = ((dy + 200) * 255 / 400).to_i  # Y → Red
-   g = ((dx + 200) * 255 / 400).to_i  # X → Green
-   b = ((dz + 200) * 255 / 400).to_i  # Z → Blue (unchanged)
-   ```
-
-3. **Re-calibrate baseline**
-   ```ruby
-   # Run calibration again:
-   5.times do
-     a = $mpu.acceleration
-     puts "Before: X=#{a[:x]}, Y=#{a[:y]}, Z=#{a[:z]}"
-     $bx[0] = (a[:x] * 100).to_i
-     $bx[1] = (a[:y] * 100).to_i
-     $bx[2] = (a[:z] * 100).to_i
-     sleep_ms(100)
-   end
+   # Add to initialization or debug section:
+   $pad_history = Array.new(5, nil)
+   $history_idx = 0
+   puts "History reset"
    ```
 
 ---
 
-## Brightness Issues
+### Problem: Too Many/Too Few PADs Highlighted
 
-### Problem: LEDs Too Bright (Blinding)
+**Symptom:** More/fewer than expected PADs showing green.
 
-**Symptom:** Even dim drum sounds create blinding flashes.
+**Solution:** See @tuning.md section "PAD History Behavior"
 
-**Diagnosis:**
-
-1. **Check velocity scaling**
-   ```ruby
-   # In light_flash(), check:
-   bri = (vel * 2).clamp(0, 255)
-   # vel = 127 (typical) → bri = 254 (nearly max)
-   ```
-
-2. **Check saturation array**
-   ```ruby
-   # Array values:
-   [255, 179, 102, 51]  # 255 = full brightness at center
-   ```
-
-**Solutions:**
-
-1. **Reduce velocity scaling** (see @tuning.md "Brightness Adjustment")
-   ```ruby
-   bri = vel  # 50% reduction
-   # or
-   bri = (vel * 1.5).clamp(0, 255)  # 25% reduction
-   ```
-
-2. **Reduce center saturation**
-   ```ruby
-   # Change [255, 179, 102, 51] to:
-   [200, 160, 100, 50]  # 200 instead of 255
-   ```
-
-3. **Slow down fade** (longer decay = lower avg brightness)
-   ```ruby
-   if $lc % 20 == 0  # Was % 15
-     $co[i] = $co[i] * 97 / 100
-   end
-   ```
-
----
-
-### Problem: LEDs Too Dim
-
-**Symptom:** Even loud drum hits barely visible.
-
-**Diagnosis:**
-
-1. **Check loop performance**
-   ```ruby
-   # Add timing:
-   loop_start = Time.now
-   # ... main loop code ...
-   loop_elapsed = Time.now - loop_start
-   if loop_elapsed > 2  # Should be <1ms
-     puts "SLOW LOOP: #{loop_elapsed}ms"
-   end
-   ```
-   - If loop is slow, LED updates lag
-
-2. **Check fade rate**
-   ```ruby
-   if $lc % 15 == 0
-     $co[i] = $co[i] * 97 / 100  # Is this running?
-     puts "Fade executed"
-   end
-   ```
-
-3. **Check velocity values**
-   ```ruby
-   # In flash_drum():
-   puts "vel=#{vel}"  # Is it always 127?
-   ```
-
-**Solutions:**
-
-1. **Increase velocity scaling**
-   ```ruby
-   bri = (vel * 3).clamp(0, 255)  # Was * 2
-   ```
-
-2. **Slow fade decay**
-   ```ruby
-   $co[i] = $co[i] * 98 / 100  # 2% decay instead of 3%
-   $co[i] = $co[i] * 99 / 100  # Or 1% for longest glow
-   ```
-
-3. **Increase saturation**
-   ```ruby
-   # [255, 179, 102, 51] → higher values
-   [255, 200, 150, 100]
-   ```
-
-4. **Optimize loop speed**
-   - Check for blocking I2C reads
-   - Skip accel reads more frequently
-   - Reduce LED update frequency
-
----
-
-## Position & Distribution Issues
-
-### Problem: Same LED Positions Always Light
-
-**Symptom:** Only PAD 0-7 light up, never see LEDs 16-59.
-
-**Diagnosis:**
-
-1. **Check pseudo-random formula**
-   ```ruby
-   # In flash_drum():
-   pos2 = ($lc * 7 + note * 3) % 60
-   # Is $lc incrementing? Is loop running?
-   ```
-
-2. **Check loop counter**
-   ```ruby
-   if $lc % 1000 == 0
-     puts "Loop count: #{$lc}"  # Should increase continuously
-   end
-   ```
-
-3. **Check collision avoidance**
-   ```ruby
-   pos2 = (pos2 + 15) % 60 if (pos1 - pos2).abs < 5
-   # If always triggering, pos2 always same distance from pos1
-   ```
-
-**Solutions:**
-
-1. **Increase pseudo-random coefficient**
-   ```ruby
-   # Change 7 to coprime multiplier:
-   pos2 = ($lc * 11 + note * 3) % 60  # More variety
-   # Or:
-   pos2 = ($lc * 13 + note * 3) % 60  # Even more variety
-   ```
-
-2. **Verify distribution**
-   ```ruby
-   # Test distribution:
-   hits = Array.new(60, 0)
-   100.times do |i|
-     pos2 = ($lc * 7 + 40 * 3) % 60
-     hits[pos2] += 1
-     $lc += 1
-   end
-   min = hits.min
-   max = hits.max
-   puts "Distribution: min=#{min}, max=#{max}, avg=#{100.0/60}"
-   # Should be roughly 1-2 hits per position
-   ```
-
-3. **Increase collision offset**
-   ```ruby
-   # If collision avoidance causes clustering:
-   pos2 = (pos2 + 20) % 60 if (pos1 - pos2).abs < 5  # Was 15
-   ```
-
----
-
-### Problem: Positions Too Close (Overlap)
-
-**Symptom:** pos1 and pos2 light adjacent LEDs, creating confusion.
-
-**Diagnosis:**
-
+Quick fix:
 ```ruby
-# In flash_drum():
-puts "pos1=#{pos1}, pos2=#{pos2}, dist=#{(pos1-pos2).abs}"
-# Should usually see distance > 5
+# Line 40: Adjust history size
+$pad_history=Array.new(3, nil)  # Only last 3 PADs
+# or
+$pad_history=Array.new(7, nil)  # Last 7 PADs
+
+# IMPORTANT: Update line 66 to match:
+$history_idx = ($history_idx + 1) % 3  # Match size!
 ```
 
+---
+
+## Acceleration Color Issues
+
+### Problem: Colors Not Responding to Motion
+
+**Symptom:** LEDs always same color regardless of ATOM movement.
+
+**Diagnosis:**
+
+1. **Check accelerometer initialization**
+   ```ruby
+   # Line 21-30: Check for errors
+   begin
+     $i2c=I2C.new(...)
+     $u=MPU6886.new($i2c)
+     puts "MPU initialized: #{$u.class}"
+   rescue => e
+     puts "MPU init failed: #{e.message}"  # Should NOT see this
+     $u=nil
+   end
+   ```
+
+2. **Check I2C lines**
+   - GPIO 21 (SDA) connected to MPU6886 SDA?
+   - GPIO 25 (SCL) connected to MPU6886 SCL?
+   - 3.3V and GND connected?
+
+3. **Test acceleration readings**
+   ```ruby
+   # Line 79-82: Add debug
+   if $tick % 15 == 0 && $u
+     a = $u.acceleration
+     ax = (a[:x] * 100).to_i
+     ay = (a[:y] * 100).to_i
+     az = (a[:z] * 100).to_i
+     puts "Accel: ax=#{ax}, ay=#{ay}, az=#{az}" if $tick % 150 == 0
+     # Should change when ATOM tilted
+   end
+   ```
+
 **Solutions:**
 
-1. **Increase avoidance distance**
-   ```ruby
-   # Original:
-   pos2 = (pos2 + 15) % 60 if (pos1 - pos2).abs < 5
-
-   # More aggressive:
-   pos2 = (pos2 + 15) % 60 if (pos1 - pos2).abs < 10
-   ```
-
-2. **Use different offset**
-   ```ruby
-   # Offset by 20 instead of 15:
-   pos2 = (pos2 + 20) % 60 if (pos1 - pos2).abs < 5
-   ```
+| Root Cause | Fix |
+|-----------|-----|
+| MPU not initialized | Check I2C wiring, 3.3V power |
+| Accel not being read | Verify line 78: `if $tick % 15 == 0 && $u` executes |
+| Colors not updating | Check line 91-92: `$current_color = [red, blue]` |
+| $u is nil | MPU init failed, check rescue block output |
 
 ---
 
-## Memory & Performance Issues
+### Problem: Wrong Colors (e.g., Blue When Moving Fast)
+
+**Symptom:** Fast motion gives blue instead of red, or vice versa.
+
+**Diagnosis:**
+
+1. **Check color assignment**
+   ```ruby
+   # Line 91: Verify assignment
+   $current_color = [red, blue]  # Index 0=red, 1=blue
+
+   # Line 104, 106: Verify usage
+   r = $current_color[0]  # Should be red
+   b = $current_color[1]  # Should be blue
+   ```
+
+2. **Check calculation**
+   ```ruby
+   # Line 85-89: Add debug
+   puts "Speed=#{speed} → red=#{red}"
+   puts "Z=#{az} → blue=#{blue}"
+   ```
+
+**Solutions:**
+
+| Symptom | Fix |
+|---------|-----|
+| Blue on fast motion | Swap line 91: `$current_color = [blue, red]` → `[red, blue]` |
+| Red on tilt | Check line 86 uses `speed`, not `az` |
+| Colors inverted | Swap indices on line 104/106 |
+
+---
+
+### Problem: Red/Blue Always Zero or Always Max
+
+**Symptom:** Red component stuck at 0x00 or 0xFF regardless of motion.
+
+**Diagnosis:**
+
+1. **Check clamping**
+   ```ruby
+   # Line 86:
+   red = (speed.clamp(0,300) * 255 / 300).to_i
+   puts "Speed raw: #{speed}, clamped: #{speed.clamp(0,300)}, red: #{red}"
+   ```
+
+2. **Check previous acceleration**
+   ```ruby
+   # Line 92: Verify $prev_accel updates
+   puts "Prev: #{$prev_accel.inspect}"
+   $prev_accel = [ax, ay, az]
+   puts "New: #{$prev_accel.inspect}"
+   ```
+
+**Solutions:**
+
+| Symptom | Root Cause | Fix |
+|---------|-----------|-----|
+| Red always 0 | `$prev_accel` not updating | Verify line 92 executes |
+| Red always 255 | Clamp range too narrow | Increase to 400 or 500 (see @tuning.md) |
+| Blue always 0 | Z-axis not changing | Tilt ATOM up/down, check sensor |
+| Blue always 255 | Clamp range too narrow | Increase to 300 or 400 (see @tuning.md) |
+
+---
+
+## Performance Issues
 
 ### Problem: Out of Memory During Build
 
@@ -427,41 +388,39 @@ puts "pos1=#{pos1}, pos2=#{pos2}, dist=#{(pos1-pos2).abs}"
 
 1. **Check code size**
    ```bash
-   wc -l src_components/R2P2-ESP32/storage/home/rwc.rb
-   # Should be <250 lines
+   wc -l src_components/R2P2-ESP32/storage/home/rwcz.rb
+   # Should be ~120 lines (new strategy is compact!)
    ```
 
-2. **Identify large allocations**
+2. **Check memory allocations**
    ```ruby
-   # In rwc.rb:
-   $co = Array.new(60, 0)       # ~240 bytes (OK)
-   $mpu = MPU6886.new(...)      # ~1KB (OK)
-   # Check for unexpected allocations
+   # rwcz.rb memory usage:
+   $co = Array.new(60, 0x101010)      # ~240 bytes
+   $pad_history = Array.new(5, nil)  # ~20 bytes
+   $prev_accel = [0,0,0]             # ~12 bytes
+   $current_color = [0,0]            # ~8 bytes
+   # Total: ~280 bytes (very small!)
    ```
 
 **Solutions:**
 
-1. **Disable accelerometer**
+1. **Reduce history size** (if desperate)
    ```ruby
-   $mpu = nil  # Skip init
-   # get_color() returns 0xFFFFFF (white)
+   $pad_history=Array.new(3, nil)  # Was 5 (saves 8 bytes)
    ```
 
-2. **Reduce LED count**
+2. **Disable acceleration** (if desperate)
    ```ruby
-   $co = Array.new(40, 0)  # 40 instead of 60
-   # Adjust bounds: p >= 40 instead of 60
-   ```
+   # Line 21-30: Comment out MPU init
+   # $u = nil
 
-3. **Reduce loop resolution**
-   ```ruby
-   sleep_ms(2)  # Instead of 1ms
-   # Adjust fade: if $lc % 7 == 0 (was %15)
+   # Line 78-95: Comment out accel sampling
+   # Result: Static green highlighting only
    ```
 
 ---
 
-### Problem: Loop Time Exceeds 1ms (Stuttering)
+### Problem: Loop Time Exceeds 1ms (Stuttering LEDs)
 
 **Symptom:** LED updates appear jerky, loop can't keep pace.
 
@@ -469,59 +428,46 @@ puts "pos1=#{pos1}, pos2=#{pos2}, dist=#{(pos1-pos2).abs}"
 
 1. **Measure loop time**
    ```ruby
-   loop do
-     start = Time.now
-     # ... main loop code ...
-     elapsed = Time.now - start
-     if elapsed > 1  # milliseconds
-       puts "SLOW: #{elapsed}ms"
-     end
-     sleep_ms(1)
+   if $tick % 1000 == 0
+     puts "Tick: #{$tick} (should increase by ~1000/sec)"
    end
    ```
 
-2. **Profile each operation**
+2. **Profile LED update**
    ```ruby
-   # Time UART read:
-   start = Time.now
-   $pc_uart.read if $pc_uart.bytes_available > 0
-   puts "UART: #{(Time.now - start)*1000}ms"
-
-   # Time LED update:
-   start = Time.now
-   $led.show_rgb(*rgb)
-   puts "LED: #{(Time.now - start)*1000}ms"
-
-   # Time fade:
-   start = Time.now
-   fade_leds
-   puts "FADE: #{(Time.now - start)*1000}ms"
+   # Before line 98:
+   update_start = $tick
+   60.times do |i|
+     # ... LED update ...
+   end
+   update_elapsed = $tick - update_start
+   puts "LED update: #{update_elapsed}ms" if update_elapsed > 1
    ```
 
 **Solutions:**
 
-1. **Skip accel reads**
+1. **Cache DRUM_LED.index lookup** (see @tuning.md "CPU Optimization")
    ```ruby
-   if $lc % 30 == 0  # Read every 30ms
-     c = get_color
+   # Before loop:
+   $led_to_pad = {}
+   DRUM_LED.each_with_index {|led_pos, pad_idx| $led_to_pad[led_pos] = pad_idx if led_pos}
+
+   # In loop (line 100):
+   pad_idx = $led_to_pad[i]  # Faster!
+   ```
+
+2. **Update LEDs less frequently**
+   ```ruby
+   # Line 117:
+   if $tick % 2 == 0  # Every 2ms
+     $led.show_hex(*$co)
    end
    ```
 
-2. **Skip LED updates**
+3. **Sample acceleration less frequently**
    ```ruby
-   if $lc % 2 == 0  # Show LED every 2ms
-     $led.show_rgb(*rgb)
-   end
-   ```
-
-3. **Reduce spread calculation**
-   ```ruby
-   # Simpler spread (only ±1):
-   [
-     [pos, 255, bri],
-     [pos-1, 150, bri], [pos+1, 150, bri]
-   ]
-   # Skip ±2, ±3
+   # Line 78:
+   if $tick % 30 == 0 && $u  # Was 15 (half frequency)
    ```
 
 ---
@@ -531,14 +477,108 @@ puts "pos1=#{pos1}, pos2=#{pos2}, dist=#{(pos1-pos2).abs}"
 When troubleshooting, add this diagnostic block:
 
 ```ruby
-if $lc % 500 == 0  # Every 500ms
-  puts "=== LED DEBUG ==="#
-  puts "Loop: #{$lc}"
-  puts "Accel: #{$bx.inspect}" if $mpu
-  puts "LED[0..4]: #{$co[0..4].map{|c| "0x#{c.to_s(16)}" }}"
-  puts "LED[58..59]: #{$co[58..59].map{|c| "0x#{c.to_s(16)}" }}"
-  puts "Color: 0x#{get_color.to_s(16)}" if $mpu
+# After line 48, add:
+if $tick % 500 == 0  # Every 500ms
+  puts "=== LED DEBUG v2 ==="
+  puts "Tick: #{$tick}"
+  puts "History: #{$pad_history.compact.inspect}"
+  puts "History idx: #{$history_idx}"
+  if $u
+    puts "Accel: #{$prev_accel.inspect}"
+    puts "Colors: R=#{$current_color[0]} B=#{$current_color[1]}"
+  else
+    puts "Accel: disabled (MPU failed)"
+  end
+  puts "LED[0]: 0x#{$co[0].to_s(16)}"
+  puts "LED[1]: 0x#{$co[1].to_s(16)}"
 end
 ```
 
 This provides key info for remote debugging.
+
+---
+
+## Common Error Messages
+
+### "MPU6886 Error: ..."
+
+**Cause**: Accelerometer initialization failed
+
+**Fix**:
+- Check I2C wiring (GPIO 21/25)
+- Verify 3.3V power to MPU6886
+- Check I2C address (should be 0x68)
+
+**Workaround**: System continues without acceleration colors (static green/white only)
+
+---
+
+### "Array index out of bounds"
+
+**Cause**: Ring buffer modulo mismatch
+
+**Fix**:
+```ruby
+# Ensure line 66 modulo matches line 40 array size:
+$pad_history=Array.new(5, nil)  # Line 40
+$history_idx = ($history_idx + 1) % 5  # Line 66 (must match!)
+```
+
+---
+
+### "LED not responding" (silent failure)
+
+**Cause**: RMTDriver or WS2812 initialization failed
+
+**Diagnosis**:
+```ruby
+# After line 16:
+puts "LED class: #{$led.class}"  # Should show WS2812
+```
+
+**Fix**:
+- Check GPIO 22 connection
+- Verify 5V power to LED strip
+- Try different RMT channel (if available)
+
+---
+
+## Verification Checklist
+
+After fixing issues, verify:
+
+- [ ] Base lighting appears on startup (dim white, all 60 LEDs)
+- [ ] Hitting PAD adds to history (green highlight appears)
+- [ ] Hitting 6th PAD removes oldest from history (first PAD goes white)
+- [ ] Fast motion adds red tint to history PADs
+- [ ] Upward tilt adds blue tint to history PADs
+- [ ] Loop runs at ~1000 Hz (1ms per iteration)
+- [ ] No flicker or stuttering
+- [ ] Debug output shows correct values
+
+---
+
+## Emergency Reset
+
+If completely broken, start fresh:
+
+```ruby
+# Replace rwcz.rb with known-good version from git:
+git checkout src_components/R2P2-ESP32/storage/home/rwcz.rb
+
+# Or rebuild from scratch (see SKILL.md)
+```
+
+---
+
+## Get Help
+
+If issues persist:
+
+1. Collect debug output (use template above)
+2. Note LED behavior (which issue from this guide?)
+3. Check hardware connections
+4. Review @tuning.md for parameter adjustments
+5. Consult @SKILL.md for system overview
+
+**Most issues are wiring or parameter tuning!**

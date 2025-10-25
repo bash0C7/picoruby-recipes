@@ -1,129 +1,120 @@
-puts "req"
+require 'uart'
+require 'ws2812'
 require 'i2c'
 require 'mpu6886'
-require 'ws2812'
-require 'uart'
 
-DRUM_LED = {
-  36=>0, 38=>1, 42=>2, 46=>3, 49=>4, 51=>5, 39=>6, 56=>7,
-  41=>8, 43=>9, 45=>10, 47=>11, 48=>12, 50=>13, 54=>14, 52=>15
-}
+# LED位置マッピング（PAD 36-56 → LED 0-15 + nil）
+DRUM_LED=[0,nil,1,nil,nil,2,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,3,nil,nil,nil,4,5,nil,nil,nil,nil,nil,nil,6,nil,7,8,nil,9,nil,10,nil,11,12,nil,13,nil,14,nil,15]
 
-puts "ini"
+# UART初期化
+$pc=UART.new(unit: :ESP32_UART0, baudrate: 115200)
+sleep_ms(10)
+$md=UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
+sleep_ms(10)
 
-$pc = UART.new(unit: :ESP32_UART0, baudrate: 115200)
-puts "1"
+# LED初期化
+$led=WS2812.new(RMTDriver.new(22))
+$co=Array.new(60, 0x101010)  # ベース照明: 全て薄暗い白
+sleep_ms(10)
 
-$md = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
-
-$led = WS2812.new(RMTDriver.new(22))
-$co = Array.new(60, 0)
-puts "2"
-
-$mpu = MPU6886.new(i2c_unit: :ESP32_I2C0, sda_pin: 21, scl_pin: 25, freq: 100000)
-puts "3"
-
-$bx = [0, 0, 0]
-5.times do
-  a = $mpu.acceleration
-  $bx[0] = (a[:x] * 100).to_i
-  $bx[1] = (a[:y] * 100).to_i
-  $bx[2] = (a[:z] * 100).to_i
-  sleep_ms(50)
+# 加速度センサー初期化
+begin
+  $i2c=I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
+  sleep_ms(100)
+  $u=MPU6886.new($i2c)
+  sleep_ms(100)
+  $u.accel_range=MPU6886::ACCEL_RANGE_2G
+  sleep_ms(100)
+rescue => e
+  puts "MPU6886 Error: #{e.message}"
+  $u=nil
 end
 
+# MIDI音源初期化（TR-808キット）
 $pc.clear_rx_buffer
-sleep_ms(100)
-$pc.read($pc.bytes_available) if $pc.bytes_available > 0
-
 $md.clear_rx_buffer
-sleep_ms(50)
-$md.write((0xC9).chr + (25).chr)
-sleep_ms(100)
+$md.write((0xC9).chr+(25).chr)
 
-$lc = 0
-$cnt = 0
+# グローバル変数
+$tick=0
+$pad_history=Array.new(5, nil)  # PAD履歴キュー（最大5個）
+$history_idx=0                  # 書き込み位置
+$prev_accel=[0,0,0]            # 前回加速度 [X,Y,Z]
+$current_color=[0,0]           # 現在色 [R,B]
 
-puts "Drum+LED"
+puts "=== New LED Strategy ==="
+puts "Base: 0x101010 (dim white)"
+puts "History: 5 PADs green highlight"
+puts "Accel: Speed->Red, Up->Blue"
 
 loop do
-  $lc += 1
+  $tick += 1
 
+  # UART受信処理
   while $pc.bytes_available > 0
     data = $pc.read(1)
     next unless data && data.length == 1
-
     cmd = data[0].ord
 
     case cmd
-    when 36..56
-      puts "D:#{cmd}" if $cnt < 5
+    when 36..56  # ドラムノート
+      # MIDI出力
       $md.write((0x99).chr + cmd.chr + (0x7F).chr)
 
-      pos1 = DRUM_LED[cmd] || ((cmd - 36) % 44 + 16)
-      pos2 = ($lc * 7 + cmd * 3) % 60
-      pos2 = (pos2 + 15) % 60 if (pos1 - pos2).abs < 5
+      # PAD履歴に追加（リングバッファ）
+      $pad_history[$history_idx] = cmd
+      $history_idx = ($history_idx + 1) % 5
 
-      c = $mpu ? begin
-        a = $mpu.acceleration
-        dx = ((a[:x] * 100).to_i - $bx[0]).clamp(-200, 200)
-        dy = ((a[:y] * 100).to_i - $bx[1]).clamp(-200, 200)
-        dz = ((a[:z] * 100).to_i - $bx[2]).clamp(-200, 200)
-        r = ((dx + 200) * 255 / 400).to_i
-        g = ((dy + 200) * 255 / 400).to_i
-        b = ((dz + 200) * 255 / 400).to_i
-        (r << 16) | (g << 8) | b
-      rescue
-        0xFFFFFF
-      end : 0xFFFFFF
+      puts "PAD:#{cmd} history=#{$pad_history.compact.inspect}"
 
-      [pos1, pos2].each do |pos|
-        next if pos < 0 || pos >= 60
-        bri = 127
-        [[pos, 255], [pos-1, 179], [pos+1, 179], [pos-2, 102], [pos+2, 102], [pos-3, 51], [pos+3, 51]].each do |p, sat_pct|
-          next if p < 0 || p >= 60
-          r = (c >> 16) & 0xFF
-          g = (c >> 8) & 0xFF
-          b_in = c & 0xFF
-          sat = sat_pct / 100.0
-          r = (r * sat + 255 * (1 - sat)).to_i
-          g = (g * sat + 255 * (1 - sat)).to_i
-          b_in = (b_in * sat + 255 * (1 - sat)).to_i
-          rgb = (r << 16) | (g << 8) | b_in
-          br = (rgb * bri / 255) & 0xFFFFFF
-          $co[p] = $co[p] | br
-        end
-      end
-
-      $cnt += 1
-      puts "[#{$cnt}] #{cmd}"
-
-    when 1..10
-      lv = cmd - 1
-      cc_val = (lv * 127 / 9).to_i.clamp(0, 127)
-      $md.write((0xB9).chr + 91.chr + cc_val.chr)
-
-    when 11..20
-      lv = cmd - 11
-      cc_val = (lv * 127 / 9).to_i.clamp(0, 127)
-      $md.write((0xB9).chr + 93.chr + cc_val.chr)
+    when 1..10   # リバーブ
+      $md.write((0xB9).chr + 91.chr + (((cmd-1)*127/9).to_i).chr)
+    when 11..20  # コーラス
+      $md.write((0xB9).chr + 93.chr + (((cmd-11)*127/9).to_i).chr)
     end
   end
 
-  if $lc % 15 == 0
-    60.times { |i| $co[i] = $co[i] > 5 ? $co[i] * 97 / 100 : 0 }
+  # 15ループごとに加速度サンプリング
+  if $tick % 15 == 0 && $u
+    a = $u.acceleration
+    ax = (a[:x] * 100).to_i
+    ay = (a[:y] * 100).to_i
+    az = (a[:z] * 100).to_i
+
+    # 赤: 動きの速さ（3軸合成差分）
+    speed = (ax-$prev_accel[0]).abs + (ay-$prev_accel[1]).abs + (az-$prev_accel[2]).abs
+    red = (speed.clamp(0,300) * 255 / 300).to_i
+
+    # 青: 上下動き（Z軸絶対値）
+    blue = (az.abs.clamp(0,200) * 255 / 200).to_i
+
+    $current_color = [red, blue]
+    $prev_accel = [ax, ay, az]
+
+    puts "Accel: spd=#{speed} R=#{red} B=#{blue}" if $tick % 150 == 0
   end
 
-  puts "L" if $lc % 1000 == 0
-
-  rgb = []
+  # LED更新（全60個を1ループで処理）
   60.times do |i|
-    c = $co[i]
-    rgb.push((c >> 16) & 0xFF)
-    rgb.push((c >> 8) & 0xFF)
-    rgb.push(c & 0xFF)
+    # このLED位置に対応するPADを逆引き
+    pad_idx = DRUM_LED.index(i)
+
+    if pad_idx && $pad_history.include?(36 + pad_idx)
+      # 履歴にあるPAD → 緑強調 + 加速度色
+      r = $current_color[0]
+      g = 0xFF
+      b = $current_color[1]
+    else
+      # 履歴にないPAD → 白弱（ベース照明）
+      r = g = b = 0x10
+    end
+
+    # ビット演算でRGB合成
+    $co[i] = (r<<16) | (g<<8) | b
   end
-  $led.show_rgb(*rgb)
+
+  # LED表示
+  $led.show_hex(*$co)
 
   sleep_ms(1)
 end
