@@ -4,6 +4,7 @@ require 'i2c'
 require 'mpu6886'
 
 GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
+HUES = [nil, 0, 128, 192, 64]
 
 pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
 sleep_ms(10)
@@ -31,6 +32,7 @@ saturation = 255
 brightness = 128
 hue_shift = 0
 last_pad = 36
+led_offset = 0
 
 loop do
   tick_count += 1
@@ -44,15 +46,14 @@ loop do
     when 36..56
       md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
       g = GT[cmd_byte] || 4
-
       if g == 5
         last_pad = 36
       else
         last_pad = cmd_byte
         group_history.shift
         group_history.push(g)
+        led_offset = (led_offset + 1) % 60
       end
-
     when 1..10
       md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
     when 11..20
@@ -65,9 +66,7 @@ loop do
     curr_ax = (accel_data[:x] * 100).to_i
     curr_ay = (accel_data[:y] * 100).to_i
     curr_az = (accel_data[:z] * 100).to_i
-
     hue_shift = (curr_az.clamp(-100, 100) * 30 / 100).to_i
-
     total_g = curr_ax.abs + curr_ay.abs + curr_az.abs
     brightness = total_g > 300 ? 255 : 128
   end
@@ -75,17 +74,13 @@ loop do
   60.times { |i| led_colors[i] = 0x00000A }
 
   sb = (saturation << 8) | brightness
-
   group_history.uniq.sort.each do |g|
+    h = (HUES[g] + hue_shift) << 16 | sb
     case g
-    when 1
-      10.times { |s| 3.times { |o| led_colors[s * 6 + o] = (hue_shift << 16) | sb } }
-    when 2
-      10.times { |s| 3.times { |o| led_colors[s * 6 + 3 + o] = ((170 + hue_shift) << 16) | sb } }
-    when 3
-      12.times { |i| led_colors[i * 5] = ((191 + hue_shift) << 16) | sb }
-    when 4
-      6.times { |i| led_colors[i * 10] = ((42 + hue_shift) << 16) | sb }
+    when 1 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + o + led_offset) % 60] = h } }
+    when 2 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + 3 + o + led_offset) % 60] = h } }
+    when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
+    when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
     end
   end
 
