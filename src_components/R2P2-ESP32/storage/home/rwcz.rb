@@ -67,10 +67,12 @@ loop do
 
   if group_history.last == 5
     60.times do |i|
-      current_hue = (led_colors[i] >> 16) & 0xFF
-      led_colors[i] = (current_hue << 16) | (255 << 8) | 255
+      h = (led_colors[i] >> 16) & 0xFF
+      led_colors[i] = (h << 16) | (255 << 8) | 255
     end
     group_history.pop
+    led_strip.show_hsb_hex(*led_colors)
+    60.times { |i| led_colors[i] = ((led_colors[i] >> 16) & 0xFF) << 16 | (saturation << 8) | 51 }
   else
     sb = (saturation << 8) | brightness
     group_history.uniq.each do |g|
@@ -82,8 +84,7 @@ loop do
       when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
       end
     end
+    led_strip.show_hsb_hex(*led_colors)
   end
-
-  led_strip.show_hsb_hex(*led_colors)
   sleep_ms(1)
 end
