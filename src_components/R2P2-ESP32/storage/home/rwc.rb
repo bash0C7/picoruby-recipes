@@ -3,96 +3,84 @@ require 'ws2812'
 require 'i2c'
 require 'mpu6886'
 
-SAT=[255,179,102,51]
-FADE=[-2,-1,0,1,2]
-DRUM_LED=[0,nil,1,nil,nil,2,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,nil,3,nil,nil,nil,4,5,nil,nil,nil,nil,nil,nil,6,nil,7,8,nil,9,nil,10,nil,11,12,nil,13,nil,14,nil,15]
+GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
+HUES = [nil, 0, 128, 192, 64, 0]
 
-$pc=UART.new(unit: :ESP32_UART0, baudrate: 115200)
+pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
 sleep_ms(10)
-$md=UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
-sleep_ms(10)
-$led=WS2812.new(RMTDriver.new(22))
-$co=Array.new(60, 0)
+md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
 sleep_ms(10)
 
-begin
-  $i2c=I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
-  sleep_ms(100)
-  $u=MPU6886.new($i2c)
-  sleep_ms(100)
-  $u.accel_range=MPU6886::ACCEL_RANGE_2G
-  sleep_ms(100)
-  a=$u.acceleration
-  $bl=[(a[:x]*100).to_i,(a[:y]*100).to_i,(a[:z]*100).to_i]
-rescue => e
-  puts "MPU6886 Error: #{e.message}"
-  $bl=[0,0,0]
-  $u=nil
-end
+led_strip = WS2812.new(RMTDriver.new(22))
+led_colors = Array.new(60, 0x0000FF)
+sleep_ms(10)
 
-$pc.clear_rx_buffer
-$md.clear_rx_buffer
-$md.write((0xC9).chr+(25).chr)
-$tick=0
+i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
+sleep_ms(100)
+accel_sensor = MPU6886.new(i2c_bus)
+sleep_ms(100)
+accel_sensor.accel_range = MPU6886::ACCEL_RANGE_2G
+sleep_ms(100)
+
+pc_uart.clear_rx_buffer
+md_uart.clear_rx_buffer
+md_uart.write((0xC9).chr + (25).chr)
+
+tick_count = 0
+group_history = [1, 1, 1]
+saturation = 255
+brightness = 51
+hue_shift = 0
+led_offset = 0
 
 loop do
-  $tick += 1
+  tick_count += 1
 
-  while $pc.bytes_available > 0
-    data = $pc.read(1)
-    next unless data && data.length == 1
-    cmd = data[0].ord
+  while pc_uart.bytes_available > 0
+    uart_data = pc_uart.read(1)
+    next unless uart_data && uart_data.length == 1
+    cmd_byte = uart_data[0].ord
 
-    case cmd
+    case cmd_byte
     when 36..56
-      $md.write((0x99).chr + cmd.chr + (0x7F).chr)
-      p1 = DRUM_LED[cmd-36] || ((cmd-36) % 44 + 16)
-      p2 = ($tick*7 + cmd*3) % 60
-      puts "D:#{cmd} p1=#{p1} p2=#{p2}"
-
-      if $u
-        a = $u.acceleration
-        dx = ((a[:x]*100).to_i - $bl[0]).clamp(-200, 200)
-        dy = ((a[:y]*100).to_i - $bl[1]).clamp(-200, 200)
-        dz = ((a[:z]*100).to_i - $bl[2]).clamp(-200, 200)
-      else
-        dx = dy = dz = 0
-      end
-
-      r = ((dx + 200) * 255 / 400).to_i
-      g = ((dy + 200) * 255 / 400).to_i
-      b = ((dz + 200) * 255 / 400).to_i
-      puts "RGB=#{r},#{g},#{b}"
-
-      [p1,p2].each do |pos|
-        next if pos<0 || pos>=60
-        SAT.each_with_index do |sat, idx|
-          fp = pos + FADE[idx]
-          next if fp<0 || fp>=60
-          rf = (r*sat) >> 8
-          gf = (g*sat) >> 8
-          bf = (b*sat) >> 8
-          col = (rf<<16) | (gf<<8) | bf
-          $co[fp] |= col
-        end
-      end
-
+      md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
+      g = GT[cmd_byte] || 4
+      group_history.shift
+      group_history.push(g)
+      led_offset = (led_offset + 1) % 60
     when 1..10
-      $md.write((0xB9).chr + 91.chr + (((cmd-1)*127/9).to_i).chr)
+      md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
     when 11..20
-      $md.write((0xB9).chr + 93.chr + (((cmd-11)*127/9).to_i).chr)
+      md_uart.write((0xB9).chr + 93.chr + (((cmd_byte - 11) * 127 / 9).to_i).chr)
     end
   end
 
-  if $tick % 100 == 0
-    60.times{|i| $co[i] = $co[i] > 5 ? ($co[i] * 97 / 100) : 0}
+  if tick_count % 15 == 0
+    accel_data = accel_sensor.acceleration
+    ax = (accel_data[:x] * 100).to_i
+    ay = (accel_data[:y] * 100).to_i
+    az = (accel_data[:z] * 100).to_i
+    hue_shift = (az.clamp(-100, 100) * 30 / 100).to_i
+    brightness = (ax.abs + ay.abs + az.abs) > 300 ? 255 : 51
   end
 
-  if $tick % 500 == 0
-    puts "co[0]=0x#{$co[0].to_s(16)} co[1]=0x#{$co[1].to_s(16)}"
+  if group_history.last == 5
+    60.times { |i| led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFFFF }
+    group_history.pop
+    led_strip.show_hsb_hex(*led_colors)
+    60.times { |i| led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33 }
+  else
+    sb = (saturation << 8) | brightness
+    group_history.uniq.each do |g|
+      h = (HUES[g] + hue_shift) << 16 | sb
+      case g
+      when 1 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + o + led_offset) % 60] = h } }
+      when 2 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + 3 + o + led_offset) % 60] = h } }
+      when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
+      when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
+      end
+    end
+    led_strip.show_hsb_hex(*led_colors)
   end
-
-  $led.show_hex(*$co)
-
   sleep_ms(1)
 end
