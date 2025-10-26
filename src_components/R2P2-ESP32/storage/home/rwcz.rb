@@ -3,41 +3,43 @@ require 'ws2812'
 require 'i2c'
 require 'mpu6886'
 
-BR=[0x66,0xB3,0xFF,0xB3,0x66]
+GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
 
-pc_uart=UART.new(unit: :ESP32_UART0, baudrate: 115200)
+pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
 sleep_ms(10)
-md_uart=UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
+md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
 sleep_ms(10)
 
-led_strip=WS2812.new(RMTDriver.new(22))
-led_colors=Array.new(60, 0x030303)
+led_strip = WS2812.new(RMTDriver.new(22))
+led_colors = Array.new(60, 0x00000A)
 sleep_ms(10)
 
 begin
-  i2c_bus=I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
+  i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
   sleep_ms(100)
-  accel_sensor=MPU6886.new(i2c_bus)
+  accel_sensor = MPU6886.new(i2c_bus)
   sleep_ms(100)
-  accel_sensor.accel_range=MPU6886::ACCEL_RANGE_2G
+  accel_sensor.accel_range = MPU6886::ACCEL_RANGE_2G
   sleep_ms(100)
 rescue => e
   puts "MPU6886 Error: #{e.message}"
-  accel_sensor=nil
+  accel_sensor = nil
 end
 
 pc_uart.clear_rx_buffer
 md_uart.clear_rx_buffer
-md_uart.write((0xC9).chr+(25).chr)
+md_uart.write((0xC9).chr + (25).chr)
 
-tick_count=0
-pad_history=Array.new(5, 49)
-history_idx=0
-prev_ax=0
-prev_ay=0
-prev_az=0
-color_red=0
-color_blue=0
+tick_count = 0
+pad_history = Array.new(5, 36)
+history_idx = 0
+saturation = 128
+brightness = 128
+hue_shift = 0
+last_pad = 0
+prev_ax = 0
+prev_ay = 0
+prev_az = 0
 
 loop do
   tick_count += 1
@@ -50,13 +52,16 @@ loop do
     case cmd_byte
     when 36..56
       md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
-      pad_history[history_idx] = cmd_byte
-      history_idx = (history_idx + 1) % 5
+      last_pad = cmd_byte
+      unless cmd_byte == 49 || cmd_byte == 52
+        pad_history[history_idx] = cmd_byte
+        history_idx = (history_idx + 1) % 5
+      end
 
     when 1..10
-      md_uart.write((0xB9).chr + 91.chr + (((cmd_byte-1)*127/9).to_i).chr)
+      md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
     when 11..20
-      md_uart.write((0xB9).chr + 93.chr + (((cmd_byte-11)*127/9).to_i).chr)
+      md_uart.write((0xB9).chr + 93.chr + (((cmd_byte - 11) * 127 / 9).to_i).chr)
     end
   end
 
@@ -66,39 +71,33 @@ loop do
     curr_ay = (accel_data[:y] * 100).to_i
     curr_az = (accel_data[:z] * 100).to_i
 
-    speed_val = (curr_ax-prev_ax).abs + (curr_ay-prev_ay).abs + (curr_az-prev_az).abs
-    color_red = (speed_val.clamp(0,300) * 255 / 300).to_i
-    color_blue = (curr_az.abs.clamp(0,200) * 255 / 200).to_i
+    hue_shift = (curr_az.clamp(-100, 100) * 30 / 100).to_i
+
+    speed_z = (curr_az - prev_az).abs.clamp(0, 150)
+    saturation = (speed_z * 255 / 150).to_i
+
+    speed_xy = ((curr_ax - prev_ax).abs + (curr_ay - prev_ay).abs).clamp(0, 200)
+    brightness = (speed_xy * 255 / 200).to_i
 
     prev_ax = curr_ax
     prev_ay = curr_ay
     prev_az = curr_az
   end
 
-  60.times {|idx| led_colors[idx] = 0x030303}
+  60.times { |i| led_colors[i] = 0x00000A }
 
-  5.times do |hist_pos|
-    pad_note = pad_history[hist_pos]
-    seed_val = pad_note * 7 + hist_pos * 11
-    num_positions = 3 + (pad_note % 3)
+  g = 0
+  5.times { |i| n = pad_history[i]; g |= 1 << ((GT[n] || 4) - 1) }
 
-    num_positions.times do |pos_idx|
-      cp = (seed_val + pos_idx * 13 + pos_idx * pos_idx * 5) % 60
+  sb = (saturation << 8) | brightness
 
-      5.times do |i|
-        p = (cp + i + 58) % 60
-        tr = (color_red * BR[i]) >> 8
-        tg = (0xFF * BR[i]) >> 8
-        tb = (color_blue * BR[i]) >> 8
-        o = led_colors[p]
-        r = (o>>16) & 0xFF
-        g = (o>>8) & 0xFF
-        b = o & 0xFF
-        led_colors[p] = ((tr>r ? tr:r)<<16) | ((tg>g ? tg:g)<<8) | (tb>b ? tb:b)
-      end
-    end
-  end
+  10.times { |s| 3.times { |o| led_colors[s * 6 + o] = (hue_shift << 16) | sb } } if (g & 1) != 0
+  10.times { |s| 3.times { |o| led_colors[s * 6 + 3 + o] = ((170 + hue_shift) << 16) | sb } } if (g & 2) != 0
+  12.times { |i| led_colors[i * 5] = ((191 + hue_shift) << 16) | sb } if (g & 4) != 0
+  6.times { |i| led_colors[i * 10] = ((42 + hue_shift) << 16) | sb } if (g & 8) != 0
 
-  led_strip.show_hex(*led_colors)
+  60.times { |i| led_colors[i] = 0x0000FF } if last_pad == 49 || last_pad == 52
+
+  led_strip.show_hsb_hex(*led_colors)
   sleep_ms(1)
 end
