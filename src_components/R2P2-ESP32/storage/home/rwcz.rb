@@ -14,27 +14,22 @@ led_strip = WS2812.new(RMTDriver.new(22))
 led_colors = Array.new(60, 0x00000A)
 sleep_ms(10)
 
-begin
-  i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
-  sleep_ms(100)
-  accel_sensor = MPU6886.new(i2c_bus)
-  sleep_ms(100)
-  accel_sensor.accel_range = MPU6886::ACCEL_RANGE_2G
-  sleep_ms(100)
-rescue => e
-  puts "MPU6886 Error: #{e.message}"
-  accel_sensor = nil
-end
+i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
+sleep_ms(100)
+accel_sensor = MPU6886.new(i2c_bus)
+sleep_ms(100)
+accel_sensor.accel_range = MPU6886::ACCEL_RANGE_2G
+sleep_ms(100)
 
 pc_uart.clear_rx_buffer
 md_uart.clear_rx_buffer
 md_uart.write((0xC9).chr + (25).chr)
 
 tick_count = 0
-pad_history = Array.new(5, 36)
+pad_history = [38, 36, 36, 36, 36]
 history_idx = 0
-saturation = 128
-brightness = 128
+saturation = 77
+brightness = 77
 hue_shift = 0
 last_pad = 0
 prev_ax = 0
@@ -65,7 +60,7 @@ loop do
     end
   end
 
-  if tick_count % 15 == 0 && accel_sensor
+  if tick_count % 15 == 0
     accel_data = accel_sensor.acceleration
     curr_ax = (accel_data[:x] * 100).to_i
     curr_ay = (accel_data[:y] * 100).to_i
@@ -74,10 +69,10 @@ loop do
     hue_shift = (curr_az.clamp(-100, 100) * 30 / 100).to_i
 
     speed_z = (curr_az - prev_az).abs.clamp(0, 150)
-    saturation = (speed_z * 255 / 150).to_i
+    saturation = 77 + (speed_z * 178 / 150).to_i
 
     speed_xy = ((curr_ax - prev_ax).abs + (curr_ay - prev_ay).abs).clamp(0, 200)
-    brightness = (speed_xy * 255 / 200).to_i
+    brightness = 77 + (speed_xy * 178 / 200).to_i
 
     prev_ax = curr_ax
     prev_ay = curr_ay
