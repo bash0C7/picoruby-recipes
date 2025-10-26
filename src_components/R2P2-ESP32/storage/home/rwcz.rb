@@ -26,15 +26,11 @@ md_uart.clear_rx_buffer
 md_uart.write((0xC9).chr + (25).chr)
 
 tick_count = 0
-pad_history = [38, 36, 36, 36, 36]
-history_idx = 0
-saturation = 77
-brightness = 77
+group_history = [2, 1, 1]
+saturation = 255
+brightness = 128
 hue_shift = 0
-last_pad = 0
-prev_ax = 0
-prev_ay = 0
-prev_az = 0
+last_pad = 36
 
 loop do
   tick_count += 1
@@ -47,10 +43,14 @@ loop do
     case cmd_byte
     when 36..56
       md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
-      last_pad = cmd_byte
-      unless cmd_byte == 49 || cmd_byte == 52
-        pad_history[history_idx] = cmd_byte
-        history_idx = (history_idx + 1) % 5
+      g = GT[cmd_byte] || 4
+
+      if g == 5
+        last_pad = 36
+      else
+        last_pad = cmd_byte
+        group_history.shift
+        group_history.push(g)
       end
 
     when 1..10
@@ -68,32 +68,31 @@ loop do
 
     hue_shift = (curr_az.clamp(-100, 100) * 30 / 100).to_i
 
-    speed_z = (curr_az - prev_az).abs.clamp(0, 150)
-    saturation = 77 + (speed_z * 178 / 150).to_i
-
-    speed_xy = ((curr_ax - prev_ax).abs + (curr_ay - prev_ay).abs).clamp(0, 200)
-    brightness = 77 + (speed_xy * 178 / 200).to_i
-
-    prev_ax = curr_ax
-    prev_ay = curr_ay
-    prev_az = curr_az
+    total_g = curr_ax.abs + curr_ay.abs + curr_az.abs
+    brightness = total_g > 300 ? 255 : 128
   end
 
   60.times { |i| led_colors[i] = 0x00000A }
 
-  g = 0
-  5.times { |i| n = pad_history[i]; g |= 1 << ((GT[n] || 4) - 1) }
-
   sb = (saturation << 8) | brightness
 
-  10.times { |s| 3.times { |o| led_colors[s * 6 + o] = (hue_shift << 16) | sb } } if (g & 1) != 0
-  10.times { |s| 3.times { |o| led_colors[s * 6 + 3 + o] = ((170 + hue_shift) << 16) | sb } } if (g & 2) != 0
-  12.times { |i| led_colors[i * 5] = ((191 + hue_shift) << 16) | sb } if (g & 4) != 0
-  6.times { |i| led_colors[i * 10] = ((42 + hue_shift) << 16) | sb } if (g & 8) != 0
+  group_history.uniq.sort.each do |g|
+    case g
+    when 1
+      10.times { |s| 3.times { |o| led_colors[s * 6 + o] = (hue_shift << 16) | sb } }
+    when 2
+      10.times { |s| 3.times { |o| led_colors[s * 6 + 3 + o] = ((170 + hue_shift) << 16) | sb } }
+    when 3
+      12.times { |i| led_colors[i * 5] = ((191 + hue_shift) << 16) | sb }
+    when 4
+      6.times { |i| led_colors[i * 10] = ((42 + hue_shift) << 16) | sb }
+    end
+  end
 
-  60.times { |i| led_colors[i] = 0x0000FF } if last_pad == 49 || last_pad == 52
-
-  last_pad = pad_history[(history_idx - 1) % 5] if last_pad == 49 || last_pad == 52
+  if last_pad == 49 || last_pad == 52
+    60.times { |i| led_colors[i] = 0x0000FF }
+    last_pad = 36
+  end
 
   led_strip.show_hsb_hex(*led_colors)
   sleep_ms(1)
