@@ -45,8 +45,10 @@ loop do
     when 36..56
       md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
       g = GT[cmd_byte] || 4
-      group_history.shift
-      group_history.push(g)
+      unless g == 5
+        group_history.shift
+        group_history.push(g)
+      end
       led_offset = (led_offset + 1) % 60
     when 1..10
       md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
@@ -68,7 +70,7 @@ loop do
   60.times { |i| led_colors[i] = 0x00000A }
 
   sb = (saturation << 8) | brightness
-  group_history.uniq.sort.each do |g|
+  group_history.uniq.each do |g|
     h = (HUES[g] + hue_shift) << 16 | sb
     case g
     when 1 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + o + led_offset) % 60] = h } }
