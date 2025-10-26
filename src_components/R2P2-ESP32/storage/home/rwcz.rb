@@ -93,6 +93,8 @@ loop do
 
   60.times { |i| led_colors[i] = 0x0000FF } if last_pad == 49 || last_pad == 52
 
+  last_pad = pad_history[(history_idx - 1) % 5] if last_pad == 49 || last_pad == 52
+
   led_strip.show_hsb_hex(*led_colors)
   sleep_ms(1)
 end
