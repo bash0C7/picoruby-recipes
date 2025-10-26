@@ -29,7 +29,7 @@ md_uart.write((0xC9).chr + (25).chr)
 tick_count = 0
 group_history = [1, 1, 1]
 saturation = 255
-brightness = 128
+brightness = 51
 hue_shift = 0
 led_offset = 0
 
@@ -57,22 +57,18 @@ loop do
 
   if tick_count % 15 == 0
     accel_data = accel_sensor.acceleration
-    curr_ax = (accel_data[:x] * 100).to_i
-    curr_ay = (accel_data[:y] * 100).to_i
-    curr_az = (accel_data[:z] * 100).to_i
-    hue_shift = (curr_az.clamp(-100, 100) * 30 / 100).to_i
-    total_g = curr_ax.abs + curr_ay.abs + curr_az.abs
-    brightness = total_g > 300 ? 255 : 51
+    ax = (accel_data[:x] * 100).to_i
+    ay = (accel_data[:y] * 100).to_i
+    az = (accel_data[:z] * 100).to_i
+    hue_shift = (az.clamp(-100, 100) * 30 / 100).to_i
+    brightness = (ax.abs + ay.abs + az.abs) > 300 ? 255 : 51
   end
 
   if group_history.last == 5
-    60.times do |i|
-      h = (led_colors[i] >> 16) & 0xFF
-      led_colors[i] = (h << 16) | (255 << 8) | 255
-    end
+    60.times { |i| led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFFFF }
     group_history.pop
     led_strip.show_hsb_hex(*led_colors)
-    60.times { |i| led_colors[i] = ((led_colors[i] >> 16) & 0xFF) << 16 | (saturation << 8) | 51 }
+    60.times { |i| led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33 }
   else
     sb = (saturation << 8) | brightness
     group_history.uniq.each do |g|
