@@ -26,6 +26,11 @@ pc_uart.clear_rx_buffer
 md_uart.clear_rx_buffer
 md_uart.write((0xC9).chr + (25).chr)
 
+button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
+last_button_state = 1
+button_debounce_count = 0
+cymbal_trigger = {flag: false}
+
 tick_count = 0
 group_history = [1, 1, 1]
 saturation = 255
@@ -35,6 +40,15 @@ led_offset = 0
 
 loop do
   tick_count += 1
+
+  current_button = button.read
+  if last_button_state == 1 && current_button == 0 && button_debounce_count == 0
+    md_uart.write((0x99).chr + 49.chr + (0x7F).chr)
+    cymbal_trigger[:flag] = true
+    button_debounce_count = 100
+  end
+  last_button_state = current_button
+  button_debounce_count -= 1 if button_debounce_count > 0
 
   while pc_uart.bytes_available > 0
     uart_data = pc_uart.read(1)
@@ -64,18 +78,40 @@ loop do
     brightness = (ax.abs + ay.abs + az.abs) > 300 ? 255 : 51
   end
 
+  if cymbal_trigger[:flag]
+    group_history.shift
+    group_history.push(5)
+    cymbal_trigger[:flag] = false
+  end
+
   if group_history.last == 5
-    60.times { |i| led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFFFF }
+    i = 0
+    while i < 60
+      led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFFFF
+      i += 1
+    end
     group_history.pop
     led_strip.show_hsb_hex(*led_colors)
-    60.times { |i| led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33 }
+    i = 0
+    while i < 60
+      led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33
+      i += 1
+    end
   else
     sb = (saturation << 8) | brightness
-    group_history.uniq.each do |g|
+    group_history.each do |g|
       h = (HUES[g] + hue_shift) << 16 | sb
       case g
-      when 1 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + o + led_offset) % 60] = h } }
-      when 2 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + 3 + o + led_offset) % 60] = h } }
+      when 1 then 10.times { |s|
+        led_colors[(s * 6 + led_offset) % 60] = h
+        led_colors[(s * 6 + 1 + led_offset) % 60] = h
+        led_colors[(s * 6 + 2 + led_offset) % 60] = h
+      }
+      when 2 then 10.times { |s|
+        led_colors[(s * 6 + 3 + led_offset) % 60] = h
+        led_colors[(s * 6 + 4 + led_offset) % 60] = h
+        led_colors[(s * 6 + 5 + led_offset) % 60] = h
+      }
       when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
       when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
       end
