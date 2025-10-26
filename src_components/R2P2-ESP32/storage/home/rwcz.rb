@@ -4,7 +4,7 @@ require 'i2c'
 require 'mpu6886'
 
 GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
-HUES = [nil, 0, 128, 192, 64]
+HUES = [nil, 0, 128, 192, 64, 0]
 
 pc_uart = UART.new(unit: :ESP32_UART0, baudrate: 115200)
 sleep_ms(10)
@@ -27,11 +27,10 @@ md_uart.clear_rx_buffer
 md_uart.write((0xC9).chr + (25).chr)
 
 tick_count = 0
-group_history = [2, 1, 1]
+group_history = [1, 1, 1]
 saturation = 255
 brightness = 128
 hue_shift = 0
-last_pad = 36
 led_offset = 0
 
 loop do
@@ -46,14 +45,9 @@ loop do
     when 36..56
       md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
       g = GT[cmd_byte] || 4
-      if g == 5
-        last_pad = 36
-      else
-        last_pad = cmd_byte
-        group_history.shift
-        group_history.push(g)
-        led_offset = (led_offset + 1) % 60
-      end
+      group_history.shift
+      group_history.push(g)
+      led_offset = (led_offset + 1) % 60
     when 1..10
       md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
     when 11..20
@@ -81,12 +75,8 @@ loop do
     when 2 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + 3 + o + led_offset) % 60] = h } }
     when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
     when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
+    when 5 then 60.times { |i| led_colors[i] = 0x0000FF }
     end
-  end
-
-  if last_pad == 49 || last_pad == 52
-    60.times { |i| led_colors[i] = 0x0000FF }
-    last_pad = 36
   end
 
   led_strip.show_hsb_hex(*led_colors)
