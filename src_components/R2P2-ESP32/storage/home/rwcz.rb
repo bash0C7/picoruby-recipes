@@ -2,6 +2,7 @@ require 'uart'
 require 'ws2812'
 require 'i2c'
 require 'mpu6886'
+require 'irq'
 
 GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
 HUES = [nil, 0, 128, 192, 64, 0]
@@ -26,6 +27,14 @@ pc_uart.clear_rx_buffer
 md_uart.clear_rx_buffer
 md_uart.write((0xC9).chr + (25).chr)
 
+cymbal_trigger = {flag: false}
+button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
+button.irq(GPIO::EDGE_FALL, debounce: 100,
+           capture: {md: md_uart, ct: cymbal_trigger}) do |btn, ev, cap|
+  cap[:md].write((0x99).chr + 49.chr + (0x7F).chr)
+  cap[:ct][:flag] = true
+end
+
 tick_count = 0
 group_history = [1, 1, 1]
 saturation = 255
@@ -35,6 +44,7 @@ led_offset = 0
 
 loop do
   tick_count += 1
+  IRQ.process
 
   while pc_uart.bytes_available > 0
     uart_data = pc_uart.read(1)
@@ -62,6 +72,12 @@ loop do
     az = (accel_data[:z] * 100).to_i
     hue_shift = (az.clamp(-100, 100) * 30 / 100).to_i
     brightness = (ax.abs + ay.abs + az.abs) > 300 ? 255 : 51
+  end
+
+  if cymbal_trigger[:flag]
+    group_history.shift
+    group_history.push(5)
+    cymbal_trigger[:flag] = false
   end
 
   if group_history.last == 5
