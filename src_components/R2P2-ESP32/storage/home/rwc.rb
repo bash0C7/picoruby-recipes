@@ -45,7 +45,7 @@ loop do
   if last_button_state == 1 && current_button == 0 && button_debounce_count == 0
     md_uart.write((0x99).chr + 49.chr + (0x7F).chr)
     cymbal_trigger[:flag] = true
-    button_debounce_count = 100
+    button_debounce_count = 10
   end
   last_button_state = current_button
   button_debounce_count -= 1 if button_debounce_count > 0
