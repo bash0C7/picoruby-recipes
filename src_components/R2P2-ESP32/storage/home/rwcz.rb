@@ -66,8 +66,10 @@ loop do
   end
 
   if group_history.last == 5
-    h = (HUES[5] + hue_shift) << 16 | (255 << 8) | 255
-    60.times { |i| led_colors[i] = h }
+    60.times do |i|
+      current_hue = (led_colors[i] >> 16) & 0xFF
+      led_colors[i] = (current_hue << 16) | (255 << 8) | 255
+    end
     group_history.pop
   else
     sb = (saturation << 8) | brightness
