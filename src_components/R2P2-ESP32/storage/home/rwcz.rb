@@ -45,10 +45,8 @@ loop do
     when 36..56
       md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
       g = GT[cmd_byte] || 4
-      unless g == 5
-        group_history.shift
-        group_history.push(g)
-      end
+      group_history.shift
+      group_history.push(g)
       led_offset = (led_offset + 1) % 60
     when 1..10
       md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
@@ -67,15 +65,19 @@ loop do
     brightness = total_g > 300 ? 255 : 128
   end
 
-  sb = (saturation << 8) | brightness
-  group_history.uniq.each do |g|
-    h = (HUES[g] + hue_shift) << 16 | sb
-    case g
-    when 1 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + o + led_offset) % 60] = h } }
-    when 2 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + 3 + o + led_offset) % 60] = h } }
-    when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
-    when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
-    when 5 then 60.times { |i| led_colors[i] = 0x0000FF }
+  if group_history.last == 5
+    60.times { |i| led_colors[i] = 0x0000FF }
+    group_history.pop
+  else
+    sb = (saturation << 8) | brightness
+    group_history.uniq.each do |g|
+      h = (HUES[g] + hue_shift) << 16 | sb
+      case g
+      when 1 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + o + led_offset) % 60] = h } }
+      when 2 then 10.times { |s| 3.times { |o| led_colors[(s * 6 + 3 + o + led_offset) % 60] = h } }
+      when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
+      when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
+      end
     end
   end
 
