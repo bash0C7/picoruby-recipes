@@ -62,7 +62,7 @@ loop do
     curr_az = (accel_data[:z] * 100).to_i
     hue_shift = (curr_az.clamp(-100, 100) * 30 / 100).to_i
     total_g = curr_ax.abs + curr_ay.abs + curr_az.abs
-    brightness = total_g > 300 ? 255 : 128
+    brightness = total_g > 300 ? 255 : 51
   end
 
   if group_history.last == 5
