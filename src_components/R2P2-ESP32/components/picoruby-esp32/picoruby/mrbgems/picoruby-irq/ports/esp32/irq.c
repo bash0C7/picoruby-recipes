@@ -10,22 +10,6 @@
 #define MAX_IRQ_HANDLERS 16
 #define IRQ_EVENT_QUEUE_SIZE (1<<5)
 
-/*
- * ESP32実装の設計方針
- * 
- * 割り込みライブラリの責務：
- * - 割り込みタイプの設定（gpio_set_intr_type）
- * - ISRハンドラの登録（gpio_isr_handler_add）
- * - 割り込みの有効化/無効化（gpio_intr_enable/disable）
- * 
- * アプリケーションの責務：
- * - GPIO方向の設定（INPUT/OUTPUT）
- * - プルアップ/プルダウンの設定
- * - 初期レベルの設定
- * 
- * 境界を守ることで、アプリケーション側のGPIO設定を尊重する。
- */
-
 typedef struct {
   int pin;
   uint32_t event_mask;
@@ -45,7 +29,7 @@ static QueueHandle_t event_queue = NULL;
 static bool isr_service_installed = false;
 
 /*
- * GPIO ISR Handler（統一状態マシン方式）
+ * GPIO ISR Handler (Unified State Machine)
  */
 static void IRAM_ATTR
 gpio_isr_handler(void* arg)
@@ -59,12 +43,12 @@ gpio_isr_handler(void* arg)
   uint32_t current_time = esp_timer_get_time() / 1000;
   int current_level = gpio_get_level(handler->pin);
 
-  /* イベントタイプ決定（EDGE優先） */
+  /* Determine event type (EDGE takes priority) */
   uint32_t events;
   gpio_int_type_t next_intr_type;
-  
+
   if (current_level == 0) {
-    /* ピンがLOW */
+    /* Pin is LOW */
     if (handler->event_mask & 4) {
       events = 4;  /* EDGE_FALL */
     } else if (handler->event_mask & 1) {
@@ -75,7 +59,7 @@ gpio_isr_handler(void* arg)
     }
     next_intr_type = GPIO_INTR_HIGH_LEVEL;
   } else {
-    /* ピンがHIGH */
+    /* Pin is HIGH */
     if (handler->event_mask & 8) {
       events = 8;  /* EDGE_RISE */
     } else if (handler->event_mask & 2) {
@@ -87,7 +71,7 @@ gpio_isr_handler(void* arg)
     next_intr_type = GPIO_INTR_LOW_LEVEL;
   }
 
-  /* デバウンスチェック */
+  /* Debounce check */
   if (handler->debounce_ms > 0) {
     uint32_t time_diff = (current_time - handler->last_event_time) & 0xFFFFFFFF;
     if (time_diff < handler->debounce_ms && events == handler->last_event_type) {
@@ -96,17 +80,17 @@ gpio_isr_handler(void* arg)
     }
   }
 
-  /* イベント履歴更新 */
+  /* Update event history */
   handler->last_event_time = current_time;
   handler->last_event_type = events;
 
-  /* 状態マシン：次の状態に切り替え */
+  /* State machine: switch to next state */
   gpio_set_intr_type(handler->pin, next_intr_type);
 
-  /* IRQ ID計算 */
+  /* Calculate IRQ ID */
   int irq_id = (handler - irq_handlers) + 1;
 
-  /* イベントキューイング */
+  /* Queue event */
   irq_event_t event = {
     .irq_id = irq_id,
     .event_type = events
@@ -118,7 +102,7 @@ gpio_isr_handler(void* arg)
 int
 IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
 {
-  /* 空きスロット検索 */
+  /* Find free slot */
   int slot = -1;
   for (int i = 0; i < MAX_IRQ_HANDLERS; i++) {
     if (!irq_handlers[i].enabled) {
@@ -131,10 +115,10 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     return -1;
   }
 
-  /* event_maskに変換 */
+  /* Convert to event_mask */
   uint32_t event_mask = event_type & 0xF;
 
-  /* キュー初期化（初回のみ） */
+  /* Initialize queue (only on first call) */
   if (event_queue == NULL) {
     event_queue = xQueueCreate(IRQ_EVENT_QUEUE_SIZE, sizeof(irq_event_t));
     if (event_queue == NULL) {
@@ -142,7 +126,7 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     }
   }
 
-  /* ISRサービス初期化（初回のみ） */
+  /* Initialize ISR service (only on first call) */
   if (!isr_service_installed) {
     esp_err_t ret = gpio_install_isr_service(0);
     if (ret != ESP_OK && ret != ESP_ERR_INVALID_STATE) {
@@ -151,17 +135,17 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     isr_service_installed = true;
   }
 
-  /* 
-   * ✅ 重要：アプリケーションのGPIO設定を尊重
-   * 
-   * gpio_config()は呼ばず、割り込み関連の設定のみを行う。
-   * GPIO方向、プルアップ/ダウンはアプリケーション側で既に設定済み。
+  /*
+   * IMPORTANT: Respect application's GPIO configuration
+   *
+   * Do not call gpio_config(), only configure interrupt-related settings.
+   * GPIO direction, pull-up/down are already configured by the application.
    */
 
-  /* 現在のピンレベルを読む（アプリケーションの設定を前提） */
+  /* Read current pin level (assuming application's configuration) */
   int initial_level = gpio_get_level(pin);
 
-  /* 状態マシン初期化：現在のピンレベルの逆を監視 */
+  /* State machine initialization: watch for transition from current level */
   gpio_int_type_t intr_type = (initial_level == 0) ? 
     GPIO_INTR_HIGH_LEVEL : GPIO_INTR_LOW_LEVEL;
 
@@ -170,7 +154,7 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
     return -1;
   }
 
-  /* ハンドラ情報保存 */
+  /* Store handler info */
   irq_handlers[slot].pin = pin;
   irq_handlers[slot].event_mask = event_mask;
   irq_handlers[slot].enabled = true;
@@ -178,20 +162,20 @@ IRQ_register_gpio(int pin, int event_type, uint32_t debounce_ms)
   irq_handlers[slot].last_event_time = 0;
   irq_handlers[slot].last_event_type = 0;
 
-  /* ISRハンドラ登録 */
+  /* Register ISR handler */
   ret = gpio_isr_handler_add(pin, gpio_isr_handler, &irq_handlers[slot]);
   if (ret != ESP_OK) {
     irq_handlers[slot].enabled = false;
     return -1;
   }
 
-  /* イベントキュークリア */
+  /* Clear event queue */
   irq_event_t dummy_event;
   while (xQueueReceive(event_queue, &dummy_event, 0) == pdTRUE) {
-    /* キューを空にする */
+    /* Drain queue */
   }
 
-  /* 割り込み有効化 */
+  /* Enable interrupt */
   ret = gpio_intr_enable(pin);
   if (ret != ESP_OK) {
     gpio_isr_handler_remove(pin);
@@ -213,11 +197,11 @@ IRQ_unregister_gpio(int irq_id)
 
   bool prev_state = irq_handlers[slot].enabled;
 
-  /* 割り込み関連の設定のみクリア（GPIO設定は保持） */
+  /* Clear interrupt-related settings only (preserve GPIO configuration) */
   gpio_isr_handler_remove(irq_handlers[slot].pin);
   gpio_set_intr_type(irq_handlers[slot].pin, GPIO_INTR_DISABLE);
 
-  /* ハンドラクリア */
+  /* Clear handler */
   memset(&irq_handlers[slot], 0, sizeof(mrb_irq_handler_t));
 
   return prev_state;
