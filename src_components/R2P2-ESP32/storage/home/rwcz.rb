@@ -11,8 +11,8 @@ sleep_ms(10)
 md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
 sleep_ms(10)
 
-led_strip = WS2812.new(RMTDriver.new(22))
-led_colors = Array.new(60, 0x0000FF)
+led_strip = WS2812.new(RMTDriver.new(27))
+led_colors = Array.new(25, 0x0000FF)
 sleep_ms(10)
 
 i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
@@ -45,7 +45,7 @@ loop do
   if last_button_state == 1 && current_button == 0 && button_debounce_count == 0
     md_uart.write((0x99).chr + 49.chr + (0x7F).chr)
     cymbal_trigger[:flag] = true
-    button_debounce_count = 100
+    button_debounce_count = 10
   end
   last_button_state = current_button
   button_debounce_count -= 1 if button_debounce_count > 0
@@ -61,7 +61,7 @@ loop do
       g = GT[cmd_byte] || 4
       group_history.shift
       group_history.push(g)
-      led_offset = (led_offset + 1) % 60
+      led_offset = (led_offset + 1) % led_colors.size
     when 1..10
       md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
     when 11..20
@@ -86,14 +86,14 @@ loop do
 
   if group_history.last == 5
     i = 0
-    while i < 60
+    while i < led_colors.size
       led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFFFF
       i += 1
     end
     group_history.pop
     led_strip.show_hsb_hex(*led_colors)
     i = 0
-    while i < 60
+    while i < led_colors.size
       led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33
       i += 1
     end
@@ -103,17 +103,17 @@ loop do
       h = (HUES[g] + hue_shift) << 16 | sb
       case g
       when 1 then 10.times { |s|
-        led_colors[(s * 6 + led_offset) % 60] = h
-        led_colors[(s * 6 + 1 + led_offset) % 60] = h
-        led_colors[(s * 6 + 2 + led_offset) % 60] = h
+        led_colors[(s * 6 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 1 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 2 + led_offset) % led_colors.size] = h
       }
       when 2 then 10.times { |s|
-        led_colors[(s * 6 + 3 + led_offset) % 60] = h
-        led_colors[(s * 6 + 4 + led_offset) % 60] = h
-        led_colors[(s * 6 + 5 + led_offset) % 60] = h
+        led_colors[(s * 6 + 3 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 4 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 5 + led_offset) % led_colors.size] = h
       }
-      when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
-      when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
+      when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % led_colors.size] = h }
+      when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % led_colors.size] = h }
       end
     end
     led_strip.show_hsb_hex(*led_colors)
