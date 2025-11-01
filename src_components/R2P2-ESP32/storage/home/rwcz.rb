@@ -11,7 +11,7 @@ sleep_ms(10)
 md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
 sleep_ms(10)
 
-led_strip = WS2812.new(RMTDriver.new(27))
+led_strip = WS2812.new(RMTDriver.new(22))
 led_colors = Array.new(25, 0x0000FF)
 sleep_ms(10)
 
