@@ -88,37 +88,43 @@ Group.create(:default, 64) { |colors, hsb, offset|
   6.times { |i| colors[(i * 10 + offset) % LED_COUNT] = hsb }
 }
 
-ctrl = UART.new(unit: :ESP32_UART0, baudrate: 115200)
-sleep_ms(10)
-synth = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
-sleep_ms(10)
+# ===== ハードウェア初期化 =====
 
-leds = WS2812.new(RMTDriver.new(22))
-colors = Array.new(LED_COUNT, INIT_COLOR)
-sleep_ms(10)
+def setup_hardware(led_pin = 22)
+  ctrl = UART.new(unit: :ESP32_UART0, baudrate: 115200)
+  sleep_ms(10)
+  synth = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
+  sleep_ms(10)
 
-i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
-sleep_ms(100)
-accel = MPU6886.new(i2c_bus)
-sleep_ms(100)
-accel.accel_range = MPU6886::ACCEL_RANGE_2G
-sleep_ms(100)
+  leds = WS2812.new(RMTDriver.new(led_pin))
+  colors = Array.new(LED_COUNT, INIT_COLOR)
+  sleep_ms(10)
 
-ctrl.clear_rx_buffer
-synth.clear_rx_buffer
-synth.write(PROG_CHG.chr + 25.chr)
+  i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
+  sleep_ms(100)
+  accel = MPU6886.new(i2c_bus)
+  sleep_ms(100)
+  accel.accel_range = MPU6886::ACCEL_RANGE_2G
+  sleep_ms(100)
 
-button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
+  ctrl.clear_rx_buffer
+  synth.clear_rx_buffer
+  synth.write(PROG_CHG.chr + 25.chr)
+
+  button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
+
+  [ctrl, synth, leds, colors, accel, button]
+end
+
+ctrl, synth, leds, colors, accel, button = setup_hardware
+
 debounce = 0
-
-tick = 0
 hist = [Group[:kick], Group[:kick], Group[:kick]]
 sat = 255
 bright = 111
 offset = 0
 
-loop do
-  tick += 1
+1.step do |tick|
 
   while ctrl.bytes_available > 0
     d = ctrl.read(1)
