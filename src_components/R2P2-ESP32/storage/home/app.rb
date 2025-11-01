@@ -87,10 +87,9 @@ loop do
   end
 
   if group_history.last == 5
-    led_colors.size.times { |i| led_colors[i] = 0x0000FF }
+    led_strip.flash!(60)
     group_history.pop
     group_history.push((tick_count % 4) + 1)
-    led_strip.show_hsb_hex(*led_colors)
   end
 
   sb = (saturation << 8) | brightness

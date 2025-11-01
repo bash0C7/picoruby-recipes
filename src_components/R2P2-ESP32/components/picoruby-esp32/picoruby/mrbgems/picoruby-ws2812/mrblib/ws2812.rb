@@ -64,6 +64,11 @@ class WS2812
     @driver.write(bytes)
   end
 
+  def flash!(num_leds)
+    bytes = Array.new(num_leds * 3, 0xFF)
+    @driver.write(bytes)
+  end
+
   private
 
   def hsb_to_rgb(h, s, b)
