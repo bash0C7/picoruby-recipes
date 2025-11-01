@@ -86,7 +86,7 @@ loop do
   if group_history.last == 5
     i = 0
     while i < 60
-      led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFFFF
+      led_colors[i] = 0x0000FF
       i += 1
     end
     group_history.pop
@@ -98,6 +98,7 @@ loop do
       i += 1
     end
   else
+    saturation = 189 + ((tick_count / 8) % 67)
     sb = (saturation << 8) | brightness
     group_history.each do |g|
       h = (HUES[g] + hue_shift) << 16 | sb
