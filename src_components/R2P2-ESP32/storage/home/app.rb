@@ -12,7 +12,7 @@ md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33
 sleep_ms(10)
 
 led_strip = WS2812.new(RMTDriver.new(22))
-led_colors = Array.new(60, 0x80A00F)
+led_colors = Array.new(60, 0xC0960A)
 sleep_ms(10)
 
 i2c_bus = I2C.new(unit: :ESP32_I2C0, frequency: 100_000, sda_pin: 25, scl_pin: 21)
