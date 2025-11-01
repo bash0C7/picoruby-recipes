@@ -78,15 +78,15 @@ Group.create(:snare, 128, notes: [38]) do |colors, hsb, offset|
   }
 end
 
-Group.create(:clap, 192, notes: [39]) do |colors, hsb, offset|
+Group.create(:clap, 192, notes: [39]) { |colors, hsb, offset|
   12.times { |i| colors[(i * 5 + offset) % LED_COUNT] = hsb }
-end
+}
 
 Group.create(:crash, 0, notes: [49, 52], rotatable: false)
 
-Group.create(:default, 64) do |colors, hsb, offset|
+Group.create(:default, 64) { |colors, hsb, offset|
   6.times { |i| colors[(i * 10 + offset) % LED_COUNT] = hsb }
-end
+}
 
 ctrl = UART.new(unit: :ESP32_UART0, baudrate: 115200)
 sleep_ms(10)
@@ -157,9 +157,7 @@ loop do
     hist[-1] = Group.rotate(tick)
   else
     hsb = (sat << SAT_SHIFT) | bright
-    hist.each do |g|
-      g.apply_leds(colors, (g.hue << HUE_SHIFT) | hsb, offset)
-    end
+    hist.each { |g| g.apply_leds(colors, (g.hue << HUE_SHIFT) | hsb, offset) }
   end
   leds.show_hsb_hex(*colors)
   sleep_ms(1)
