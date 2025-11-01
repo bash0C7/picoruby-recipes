@@ -136,13 +136,21 @@ Real-time drum performance system using DDJ-400 controller + ATOM Matrix.
 
 **Detailed Information**: See `.claude/skills/finger-drum/SKILL.md`
 
-**Related Files**:
+**PicoRuby Application (Auto-executed on boot)**:
+- **Entry Point**: `src_components/R2P2-ESP32/storage/home/app.rb` (main application, auto-runs on ESP32 startup)
+  - Handles UART communication with PC
+  - Controls MIDI output to synthesizer
+  - Manages LED visualization (WS2812 strip, 60 LEDs)
+  - Reads accelerometer (MPU6886) for dynamic color effects
+  - Processes button input (GPIO 39) for crash cymbal trigger
+
+**Related Implementation Files**:
 - Design/README: `src_components/pc/drum_readme.rb`
 - Protocol spec: `src_components/pc/drum_protcolspec.md`
 - PC MIDI version: `src_components/pc/drum_midi.rb`
 - PC keyboard version: `src_components/pc/drum_pc.rb`
-- PicoRuby compact: `src_components/R2P2-ESP32/storage/home/rwcc.rb`
-- PicoRuby full (LED): `src_components/R2P2-ESP32/storage/home/rwc.rb`
+- PicoRuby compact reference: `src_components/R2P2-ESP32/storage/home/rwcc.rb`
+- PicoRuby full reference: `src_components/R2P2-ESP32/storage/home/rwc.rb`
 
 Auto-loads when keywords mentioned: finger drum, DDJ-400, drum performance, MIDI performance
 

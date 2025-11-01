@@ -43,18 +43,28 @@ DDJ-400 → PC (CRuby) → UART → ATOM Matrix → MIDI Module
 
 ### PicoRuby Side (ATOM Matrix)
 
-**rwcc.rb** - Compact Receiver (~200 lines)
-- Protocol v2 parsing
-- MIDI output
-- Debug logging
-- For: Embedded deployment, minimal RAM
+**app.rb** - MAIN APPLICATION (Auto-executed on ESP32 startup)
+- Entry point for the finger drum system
+- Protocol v2 parsing from PC
+- MIDI output to synthesizer module
+- 60 LED WS2812 strip visualization
+- MPU6886 accelerometer → RGB color mapping
+- Accelerometer → dynamic saturation/brightness control
+- GPIO 39 button input for crash cymbal trigger
+- For: Live performance with full LED feedback
 
-**rwc.rb** - Full Version with LED
-- All rwcc.rb features PLUS:
+**rwc.rb** - Full Version with LED (reference/alternative)
+- Equivalent to app.rb with all features
 - 60 LED WS2812 strip visualization
 - MPU6886 accelerometer → RGB color mapping
 - Accelerometer → MIDI CC mapping
 - For: Stage performance, visual feedback
+
+**rwcc.rb** - Compact Receiver (~200 lines, reference)
+- Protocol v2 parsing
+- MIDI output
+- Debug logging
+- For: Embedded deployment, minimal RAM (alternative if LED not needed)
 
 ## Protocol v2 Quick Reference
 
@@ -90,7 +100,12 @@ ATOM Matrix (ESP32)
 
 ### Change Drum Kit
 
-In `rwcc.rb` or `rwc.rb`, line ~64:
+In `app.rb` (main application), around line 27:
+```ruby
+md_uart.write((0xC9).chr + (25).chr)  # Change 25 to desired kit
+```
+
+Or in reference files `rwcc.rb` or `rwc.rb`, line ~64:
 ```ruby
 $md.write((0xC9).chr + (25).chr)  # Change 25 to desired kit
 ```
@@ -113,9 +128,10 @@ MIDI Drum Kit Numbers:
 - Verify baud: 115200 (PC↔UART0), 31250 (MIDI↔UART1)
 - Confirm DR-808 kit supports note range
 
-**LED not lighting?** (rwc.rb only)
+**LED not lighting?** (app.rb / rwc.rb)
 - Check WS2812 on GPIO 22
 - Verify LED count = 60
+- Check that app.rb is loaded and running
 
 **Knobs not responding?**
 - DDJ-400 sends CC#23 (DECK1 FILTER), CC#24 (DECK2 FILTER)
@@ -124,9 +140,11 @@ MIDI Drum Kit Numbers:
 
 ## Related Documentation
 
+- `app.rb` - **Main PicoRuby application (auto-executed on boot)**
+- `rwc.rb` - Full PicoRuby version with LED (reference)
+- `rwcc.rb` - Compact PicoRuby receiver (reference, minimal RAM)
 - `drum_readme.rb` - Full user guide (Japanese)
 - `drum_protcolspec.md` - Complete protocol spec
 - `architecture.md` - System architecture details
 - `protocol.md` - Protocol v2 reference
 - `drum_midi.rb`, `drum_pc.rb` - PC source code
-- `rwcc.rb`, `rwc.rb` - PicoRuby source code
