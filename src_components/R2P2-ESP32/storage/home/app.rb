@@ -100,6 +100,10 @@ loop do
     group_history.push((tick_count % 4) + 1)
     led_strip.show_hsb_hex(*led_colors)
 
+    # 退避した値を復元（次のループで使用される）
+    saturation = saved_saturation
+    brightness = saved_brightness
+
     # 無意味な処理（実行されないため削除）
     #i = 0
     #while i < 60
