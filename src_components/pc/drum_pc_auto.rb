@@ -6,30 +6,35 @@ puts "=== PicoRuby Finger Drum - Auto Play 16-beat Version ==="
 puts "キーボード → UART → ATOM Matrix → MIDI Unit にょん！"
 
 # ドラムノート定義
-KICK = 36   # バスドラム
-SNARE = 38  # スネア
-CRASH = 49  # クラッシュシンバル
-CLAP = 39   # クラップ
+KICK = 36           # バスドラム
+SNARE = 38          # スネア
+CLAP = 39           # クラップ
+HI_HAT_CLOSE = 42   # ハイハット（クローズ）
+HI_HAT_OPEN = 46    # ハイハット（オープン）
+HIGH_TOM = 50       # ハイタム
+MID_TOM = 47        # ミッドタム
+LOW_TOM = 41        # ロータム
 
 # 16ビートパターン（120bpm）
 # 1 quarter note = 0.5秒 → 1 16th note = 0.125秒 = 125ms
+# 奇数ステップ: 表拍、偶数ステップ: 裏拍（ハイハット、タム系を配置）
 drum_pattern = [
-  KICK,  # Step 1
-  KICK,  # Step 2
-  SNARE, # Step 3
-  KICK,  # Step 4
-  KICK,  # Step 5
-  CLAP,  # Step 6
-  SNARE, # Step 7
-  KICK,  # Step 8
-  CRASH, # Step 9 (バリエーション)
-  KICK,  # Step 10
-  SNARE, # Step 11
-  KICK,  # Step 12
-  KICK,  # Step 13
-  CLAP,  # Step 14
-  SNARE, # Step 15
-  KICK   # Step 16
+  KICK,           # Step 1  (1拍目)
+  HI_HAT_CLOSE,   # Step 2  (1拍目の裏)
+  SNARE,          # Step 3  (2拍目)
+  HI_HAT_CLOSE,   # Step 4  (2拍目の裏)
+  KICK,           # Step 5  (3拍目)
+  HI_HAT_CLOSE,   # Step 6  (3拍目の裏)
+  SNARE,          # Step 7  (4拍目)
+  HI_HAT_OPEN,    # Step 8  (4拍目の裏、オープンで開放感)
+  KICK,           # Step 9  (5拍目)
+  MID_TOM,        # Step 10 (5拍目の裏、タム系で音彩)
+  SNARE,          # Step 11 (6拍目)
+  HI_HAT_CLOSE,   # Step 12 (6拍目の裏)
+  KICK,           # Step 13 (7拍目)
+  CLAP,           # Step 14 (7拍目の裏、クラップでアクセント)
+  SNARE,          # Step 15 (8拍目)
+  LOW_TOM         # Step 16 (8拍目の裏、ロータムで締め)
 ]
 
 # シリアルデバイス接続
@@ -74,7 +79,8 @@ puts "✓ コーラス: #{chorus_level}"
 puts "✓ ベロシティ: 127 (PicoRuby側で固定)"
 
 puts "\n=== 16ビート自動演奏モード開始 ==="
-puts "バスドラム + スネア + クラッシュ + クラップで16ビート展開！"
+puts "バスドラム + スネア + クラップ + ハイハット + タム系の豊かなドラムパターン！"
+puts "裏拍にハイハット・タムをちりばめた16ビート展開"
 puts "120bpm で自動演奏中... q キーで終了\n"
 
 # グローバルフラグ
@@ -113,8 +119,12 @@ begin
     drum_names = {
       KICK => "Kick",
       SNARE => "Snare",
-      CRASH => "Crash",
-      CLAP => "Clap"
+      CLAP => "Clap",
+      HI_HAT_CLOSE => "HiHat-",
+      HI_HAT_OPEN => "HiHat+",
+      HIGH_TOM => "Tom-H",
+      MID_TOM => "Tom-M",
+      LOW_TOM => "Tom-L"
     }
 
     puts "♪ Step #{(step % drum_pattern.length) + 1}: #{drum_names[note]}"
