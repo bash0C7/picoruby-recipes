@@ -150,8 +150,7 @@ loop do
 
   if tick % 10 == 0
     a = accel.acceleration
-    mag = ((a[:x].abs + a[:y].abs + a[:z].abs) * 100).to_i
-    d = mag - 100
+    d = ((a[:x].abs + a[:y].abs + a[:z].abs) * 100).to_i - 100
     sat = (d * d / 20 + 127).clamp(50, 255)
     bright = ((sat - 127) * 81 / 128 + 30).clamp(15, 111)
   end
@@ -162,8 +161,7 @@ loop do
   else
     hsb = (sat << SAT_SHIFT) | bright
     hist.each do |g|
-      h = (g.hue << HUE_SHIFT) | hsb
-      g.apply_leds(colors, h, offset)
+      g.apply_leds(colors, (g.hue << HUE_SHIFT) | hsb, offset)
     end
   end
   leds.show_hsb_hex(*colors)
