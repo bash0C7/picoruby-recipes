@@ -109,7 +109,6 @@ synth.clear_rx_buffer
 synth.write(PROG_CHG.chr + 25.chr)
 
 button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
-last_button = 1
 debounce = 0
 
 tick = 0
@@ -139,13 +138,11 @@ loop do
     end
   end
 
-  b = button.read
-  if last_button == 1 && b == 0 && debounce == 0
+  if button.read == 0 && debounce == 0
     synth.write(NOTE_ON.chr + 49.chr + VEL_MAX.chr)
     hist[-1] = Group[:crash]
-    debounce = 10
+    debounce = 50
   end
-  last_button = b
   debounce -= 1 if debounce > 0
 
   if tick % 10 == 0
