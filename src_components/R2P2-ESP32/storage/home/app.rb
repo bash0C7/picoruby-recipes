@@ -60,7 +60,7 @@ loop do
       g = GT[cmd_byte] || 4
       group_history.shift
       group_history.push(g)
-      led_offset = (led_offset + 1) % 60
+      led_offset = (led_offset + 1) % led_colors.size
     when 1..10
       md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
     when 11..20
@@ -87,11 +87,7 @@ loop do
   end
 
   if group_history.last == 5
-    i = 0
-    while i < 60
-      led_colors[i] = 0x0000FF
-      i += 1
-    end
+    led_colors.size.times { |i| led_colors[i] = 0x0000FF }
     group_history.pop
     group_history.push((tick_count % 4) + 1)
     led_strip.show_hsb_hex(*led_colors)
@@ -101,18 +97,22 @@ loop do
   group_history.each do |g|
     h = HUES[g] << 16 | sb
     case g
-    when 1 then 10.times { |s|
-      led_colors[(s * 6 + led_offset) % 60] = h
-      led_colors[(s * 6 + 1 + led_offset) % 60] = h
-      led_colors[(s * 6 + 2 + led_offset) % 60] = h
-    }
-    when 2 then 10.times { |s|
-      led_colors[(s * 6 + 3 + led_offset) % 60] = h
-      led_colors[(s * 6 + 4 + led_offset) % 60] = h
-      led_colors[(s * 6 + 5 + led_offset) % 60] = h
-    }
-    when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
-    when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
+    when 1
+      10.times { |s|
+        led_colors[(s * 6 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 1 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 2 + led_offset) % led_colors.size] = h
+      }
+    when 2
+      10.times { |s|
+        led_colors[(s * 6 + 3 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 4 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 5 + led_offset) % led_colors.size] = h
+      }
+    when 3
+      12.times { |i| led_colors[(i * 5 + led_offset) % led_colors.size] = h }
+    when 4
+      6.times { |i| led_colors[(i * 10 + led_offset) % led_colors.size] = h }
     end
   end
   led_strip.show_hsb_hex(*led_colors)
