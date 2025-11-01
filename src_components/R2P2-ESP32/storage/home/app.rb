@@ -70,7 +70,7 @@ Group.create(:default, 64) { |colors, hsb, offset| 6.times { |i| colors[(i * 10 
 
 # ===== ハードウェア初期化 =====
 
-def setup_hardware(led_pin = 22)
+ctrl, synth, leds, colors, accel, button = ->(led_pin = 22) {
   ctrl = UART.new(unit: :ESP32_UART0, baudrate: 115200)
   sleep_ms(10)
   synth = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
@@ -94,9 +94,7 @@ def setup_hardware(led_pin = 22)
   button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
 
   [ctrl, synth, leds, colors, accel, button]
-end
-
-ctrl, synth, leds, colors, accel, button = setup_hardware
+}.call
 
 debounce = 0
 hist = [Group[:kick], Group[:kick], Group[:kick]]
