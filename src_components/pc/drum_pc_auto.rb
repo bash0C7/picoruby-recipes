@@ -4,6 +4,7 @@ require 'thread'
 
 puts "=== PicoRuby Finger Drum - Auto Play 16-beat Version ==="
 puts "キーボード → UART → ATOM Matrix → MIDI Unit にょん！"
+$stdout.flush
 
 # ドラムノート定義
 KICK = 36           # バスドラム
@@ -45,9 +46,12 @@ if serial_devices.empty?
 end
 
 puts "\n見つかったシリアルデバイス:"
+$stdout.flush
 serial_devices.each_with_index { |d, i| puts "#{i}: #{d}" }
+$stdout.flush
 
 print "\nシリアルデバイス番号を選択: "
+$stdout.flush
 device_num = gets.chomp.to_i
 
 if device_num < 0 || device_num >= serial_devices.length
@@ -57,14 +61,18 @@ end
 
 serial = UART.open(serial_devices[device_num], 115200)
 puts "接続完了: #{serial_devices[device_num]}"
+$stdout.flush
 
 # エフェクト設定
 puts "\n【初期設定】"
+$stdout.flush
 print "リバーブレベル (0-9, デフォルト5): "
+$stdout.flush
 reverb_input = gets.chomp
 reverb_level = reverb_input.empty? ? 5 : reverb_input.to_i.clamp(0, 9)
 
 print "コーラスレベル (0-9, デフォルト5): "
+$stdout.flush
 chorus_input = gets.chomp
 chorus_level = chorus_input.empty? ? 5 : chorus_input.to_i.clamp(0, 9)
 
@@ -77,11 +85,13 @@ sleep(0.05)
 puts "\n✓ リバーブ: #{reverb_level}"
 puts "✓ コーラス: #{chorus_level}"
 puts "✓ ベロシティ: 127 (PicoRuby側で固定)"
+$stdout.flush
 
 puts "\n=== 16ビート自動演奏モード開始 ==="
 puts "バスドラム + スネア + クラップ + ハイハット + タム系の豊かなドラムパターン！"
 puts "裏拍にハイハット・タムをちりばめた16ビート展開"
 puts "120bpm で自動演奏中... q キーで終了\n"
+$stdout.flush
 
 # グローバルフラグ
 $should_exit = false
@@ -127,7 +137,8 @@ begin
       LOW_TOM => "Tom-L"
     }
 
-    puts "♪ Step #{(step % drum_pattern.length) + 1}: #{drum_names[note]}"
+    $stdout.puts "♪ Step #{(step % drum_pattern.length) + 1}: #{drum_names[note]}"
+    $stdout.flush
 
     # 120bpm の 16ビート = 125ms 間隔
     sleep(0.125)
