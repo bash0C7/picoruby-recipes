@@ -35,7 +35,6 @@ tick_count = 0
 group_history = [1, 1, 1]
 saturation = 255
 brightness = 111
-hue_shift = 0
 led_offset = 0
 
 loop do
@@ -74,7 +73,9 @@ loop do
     ax = (accel_data[:x] * 100).to_i
     ay = (accel_data[:y] * 100).to_i
     az = (accel_data[:z] * 100).to_i
-    hue_shift = ((ax + ay + az).clamp(-300, 300) * 127 / 300).to_i
+    accel_mag = ax.abs + ay.abs + az.abs
+    saturation = (accel_mag / 4).clamp(50, 255)
+    puts saturation
   end
 
   if cymbal_trigger[:flag]
@@ -98,10 +99,9 @@ loop do
       i += 1
     end
   else
-    saturation = 189 + ((tick_count / 8) % 67)
     sb = (saturation << 8) | brightness
     group_history.each do |g|
-      h = (HUES[g] + hue_shift) << 16 | sb
+      h = HUES[g] << 16 | sb
       case g
       when 1 then 10.times { |s|
         led_colors[(s * 6 + led_offset) % 60] = h
