@@ -129,9 +129,8 @@ loop do
     case cmd
     when 36..56
       synth.write(NOTE_ON.chr + cmd.chr + VEL_MAX.chr)
-      g = Group.from_note(cmd)
       hist.shift
-      hist << g
+      hist << Group.from_note(cmd)
       offset = (offset + 1) % LED_COUNT
     when 1..10
       synth.write(CC.chr + 91.chr + (((cmd - 1) * 127 / 9).to_i).chr)
