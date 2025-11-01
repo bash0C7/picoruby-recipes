@@ -90,6 +90,7 @@ loop do
       i += 1
     end
     group_history.pop
+    group_history.push((tick_count % 4) + 1)
     led_strip.show_hsb_hex(*led_colors)
     i = 0
     while i < 60
