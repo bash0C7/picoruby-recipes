@@ -75,8 +75,8 @@ loop do
     az = (accel_data[:z] * 100).to_i
     accel_mag = ax.abs + ay.abs + az.abs
     delta = accel_mag - 100
-    saturation = (delta * delta / 20 + 127).clamp(127, 255)
-    brightness = ((saturation - 127) * 81 / 128 + 30).clamp(30, 111)
+    saturation = (delta * delta / 20 + 127).clamp(50, 255)
+    brightness = ((saturation - 127) * 81 / 128 + 30).clamp(15, 111)
     puts saturation, brightness
   end
 
@@ -87,6 +87,10 @@ loop do
   end
 
   if group_history.last == 5
+    # 元のsaturation/brightnessを退避
+    saved_saturation = saturation
+    saved_brightness = brightness
+
     i = 0
     while i < 60
       led_colors[i] = 0x0000FF
@@ -95,11 +99,13 @@ loop do
     group_history.pop
     group_history.push((tick_count % 4) + 1)
     led_strip.show_hsb_hex(*led_colors)
-    i = 0
-    while i < 60
-      led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33
-      i += 1
-    end
+
+    # 無意味な処理（実行されないため削除）
+    #i = 0
+    #while i < 60
+    #  led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33
+    #  i += 1
+    #end
   else
     sb = (saturation << 8) | brightness
     group_history.each do |g|
