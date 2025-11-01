@@ -76,8 +76,8 @@ loop do
     accel_mag = ax.abs + ay.abs + az.abs
     delta = accel_mag - 100
     saturation = (delta * delta / 20 + 127).clamp(127, 255)
-    brightness = ((saturation - 127) * 61 / 128 + 50).clamp(50, 111)
-    puts saturation
+    brightness = ((saturation - 127) * 81 / 128 + 30).clamp(30, 111)
+    puts saturation, brightness
   end
 
   if cymbal_trigger[:flag]
@@ -95,11 +95,11 @@ loop do
     group_history.pop
     group_history.push((tick_count % 4) + 1)
     led_strip.show_hsb_hex(*led_colors)
-    #i = 0
-    #while i < 60
-    #  led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33
-    #  i += 1
-    #end
+    i = 0
+    while i < 60
+      led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33
+      i += 1
+    end
   else
     sb = (saturation << 8) | brightness
     group_history.each do |g|
