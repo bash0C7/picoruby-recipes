@@ -87,10 +87,6 @@ loop do
   end
 
   if group_history.last == 5
-    # 元のsaturation/brightnessを退避
-    saved_saturation = saturation
-    saved_brightness = brightness
-
     i = 0
     while i < 60
       led_colors[i] = 0x0000FF
@@ -99,37 +95,26 @@ loop do
     group_history.pop
     group_history.push((tick_count % 4) + 1)
     led_strip.show_hsb_hex(*led_colors)
-
-    # 退避した値を復元（次のループで使用される）
-    saturation = saved_saturation
-    brightness = saved_brightness
-
-    # 無意味な処理（実行されないため削除）
-    #i = 0
-    #while i < 60
-    #  led_colors[i] = (led_colors[i] & 0xFF0000) | 0xFF33
-    #  i += 1
-    #end
-  else
-    sb = (saturation << 8) | brightness
-    group_history.each do |g|
-      h = HUES[g] << 16 | sb
-      case g
-      when 1 then 10.times { |s|
-        led_colors[(s * 6 + led_offset) % 60] = h
-        led_colors[(s * 6 + 1 + led_offset) % 60] = h
-        led_colors[(s * 6 + 2 + led_offset) % 60] = h
-      }
-      when 2 then 10.times { |s|
-        led_colors[(s * 6 + 3 + led_offset) % 60] = h
-        led_colors[(s * 6 + 4 + led_offset) % 60] = h
-        led_colors[(s * 6 + 5 + led_offset) % 60] = h
-      }
-      when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
-      when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
-      end
-    end
-    led_strip.show_hsb_hex(*led_colors)
   end
+
+  sb = (saturation << 8) | brightness
+  group_history.each do |g|
+    h = HUES[g] << 16 | sb
+    case g
+    when 1 then 10.times { |s|
+      led_colors[(s * 6 + led_offset) % 60] = h
+      led_colors[(s * 6 + 1 + led_offset) % 60] = h
+      led_colors[(s * 6 + 2 + led_offset) % 60] = h
+    }
+    when 2 then 10.times { |s|
+      led_colors[(s * 6 + 3 + led_offset) % 60] = h
+      led_colors[(s * 6 + 4 + led_offset) % 60] = h
+      led_colors[(s * 6 + 5 + led_offset) % 60] = h
+    }
+    when 3 then 12.times { |i| led_colors[(i * 5 + led_offset) % 60] = h }
+    when 4 then 6.times { |i| led_colors[(i * 10 + led_offset) % 60] = h }
+    end
+  end
+  led_strip.show_hsb_hex(*led_colors)
   sleep_ms(1)
 end
