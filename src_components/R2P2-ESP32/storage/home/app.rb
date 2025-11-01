@@ -62,31 +62,11 @@ class Group
 end
 
 # グループ定義
-Group.create(:kick, 0, notes: [36]) do |colors, hsb, offset|
-  10.times { |s|
-    colors[(s * 6 + offset) % LED_COUNT] = hsb
-    colors[(s * 6 + 1 + offset) % LED_COUNT] = hsb
-    colors[(s * 6 + 2 + offset) % LED_COUNT] = hsb
-  }
-end
-
-Group.create(:snare, 128, notes: [38]) do |colors, hsb, offset|
-  10.times { |s|
-    colors[(s * 6 + 3 + offset) % LED_COUNT] = hsb
-    colors[(s * 6 + 4 + offset) % LED_COUNT] = hsb
-    colors[(s * 6 + 5 + offset) % LED_COUNT] = hsb
-  }
-end
-
-Group.create(:clap, 192, notes: [39]) { |colors, hsb, offset|
-  12.times { |i| colors[(i * 5 + offset) % LED_COUNT] = hsb }
-}
-
+Group.create(:kick, 0, notes: [36]) { |colors, hsb, offset| 10.times { |s| (0..2).each { |i| colors[(s * 6 + i + offset) % LED_COUNT] = hsb } } }
+Group.create(:snare, 128, notes: [38]) { |colors, hsb, offset| 10.times { |s| (3..5).each { |i| colors[(s * 6 + i + offset) % LED_COUNT] = hsb } } }
+Group.create(:clap, 192, notes: [39]) { |colors, hsb, offset| 12.times { |i| colors[(i * 5 + offset) % LED_COUNT] = hsb } }
 Group.create(:crash, 0, notes: [49, 52], rotatable: false)
-
-Group.create(:default, 64) { |colors, hsb, offset|
-  6.times { |i| colors[(i * 10 + offset) % LED_COUNT] = hsb }
-}
+Group.create(:default, 64) { |colors, hsb, offset| 6.times { |i| colors[(i * 10 + offset) % LED_COUNT] = hsb } }
 
 # ===== ハードウェア初期化 =====
 
