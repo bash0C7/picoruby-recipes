@@ -34,7 +34,7 @@ cymbal_trigger = {flag: false}
 tick_count = 0
 group_history = [1, 1, 1]
 saturation = 255
-brightness = 51
+brightness = 111
 hue_shift = 0
 led_offset = 0
 
@@ -69,14 +69,12 @@ loop do
     end
   end
 
-  if tick_count % 10 == 0
+  if tick_count % 15 == 0
     accel_data = accel_sensor.acceleration
     ax = (accel_data[:x] * 100).to_i
     ay = (accel_data[:y] * 100).to_i
     az = (accel_data[:z] * 100).to_i
-    hue_shift = (az.clamp(-100, 100) * 30 / 100).to_i
-    accel_magnitude = ax.abs + ay.abs + az.abs
-    brightness = (120 + ((accel_magnitude.clamp(0, 180) * 135 / 180).to_i)).clamp(0, 255)
+    hue_shift = ((ax + ay + az).clamp(-300, 300) * 127 / 300).to_i
   end
 
   if cymbal_trigger[:flag]
