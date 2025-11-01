@@ -75,7 +75,8 @@ loop do
     ay = (accel_data[:y] * 100).to_i
     az = (accel_data[:z] * 100).to_i
     hue_shift = (az.clamp(-100, 100) * 30 / 100).to_i
-    brightness = (ax.abs + ay.abs + az.abs) > 80 ? 255 : 51
+    accel_magnitude = ax.abs + ay.abs + az.abs
+    brightness = (120 + ((accel_magnitude.clamp(0, 180) * 135 / 180).to_i)).clamp(0, 255)
   end
 
   if cymbal_trigger[:flag]
