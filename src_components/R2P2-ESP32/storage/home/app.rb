@@ -27,6 +27,7 @@ class Group
   @@groups = {}
   @@note_map = {}
   @@rotation = []
+  @@offset = 0
   attr_reader :name, :hue
 
   def initialize(name, hue)
@@ -56,17 +57,21 @@ class Group
     @@rotation[tick % @@rotation.size]
   end
 
-  def apply_leds(colors, hsb, offset)
-    puts "Unknown group: name=#{@name}, hue=#{@hue}, hsb=#{hsb}, offset=#{offset}"
+  def self.advance_offset
+    @@offset = (@@offset + 1) % LED_COUNT
+  end
+
+  def apply_leds(colors, hsb)
+    puts "Unknown group: name=#{@name}, hue=#{@hue}, hsb=#{hsb}"
   end
 end
 
 # グループ定義
-Group.create(:kick, 0, notes: [36]) { |colors, hsb, offset| 10.times { |s| (0..2).each { |i| colors[(s * 6 + i + offset) % LED_COUNT] = hsb } } }
-Group.create(:snare, 128, notes: [38]) { |colors, hsb, offset| 10.times { |s| (3..5).each { |i| colors[(s * 6 + i + offset) % LED_COUNT] = hsb } } }
-Group.create(:clap, 192, notes: [39]) { |colors, hsb, offset| 12.times { |i| colors[(i * 5 + offset) % LED_COUNT] = hsb } }
+Group.create(:kick, 0, notes: [36]) { |colors, hsb| 10.times { |s| (0..2).each { |i| colors[(s * 6 + i + @@offset) % LED_COUNT] = hsb } } }
+Group.create(:snare, 128, notes: [38]) { |colors, hsb| 10.times { |s| (3..5).each { |i| colors[(s * 6 + i + @@offset) % LED_COUNT] = hsb } } }
+Group.create(:clap, 192, notes: [39]) { |colors, hsb| 12.times { |i| colors[(i * 5 + @@offset) % LED_COUNT] = hsb } }
 Group.create(:crash, 0, notes: [49, 52], rotatable: false)
-Group.create(:default, 64) { |colors, hsb, offset| 6.times { |i| colors[(i * 10 + offset) % LED_COUNT] = hsb } }
+Group.create(:default, 64) { |colors, hsb| 6.times { |i| colors[(i * 10 + @@offset) % LED_COUNT] = hsb } }
 
 # ===== ハードウェア初期化 =====
 
@@ -100,7 +105,6 @@ debounce = 0
 hist = [Group[:kick], Group[:kick], Group[:kick]]
 sat = 255
 bright = 111
-offset = 0
 
 1.step do |tick|
 
@@ -114,7 +118,7 @@ offset = 0
       synth.write(NOTE_ON.chr + cmd.chr + VEL_MAX.chr)
       hist.shift
       hist << Group.from_note(cmd)
-      offset = (offset + 1) % LED_COUNT
+      Group.advance_offset
     when 1..10
       synth.write(CC.chr + 91.chr + (((cmd - 1) * 127 / 9).to_i).chr)
     when 11..20
@@ -141,7 +145,7 @@ offset = 0
     hist[-1] = Group.rotate(tick)
   else
     hsb = (sat << SAT_SHIFT) | bright
-    hist.each { |g| g.apply_leds(colors, (g.hue << HUE_SHIFT) | hsb, offset) }
+    hist.each { |g| g.apply_leds(colors, (g.hue << HUE_SHIFT) | hsb) }
   end
   leds.show_hsb_hex(*colors)
   sleep_ms(1)
