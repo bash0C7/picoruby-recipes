@@ -113,6 +113,8 @@ loop do
     end
   end
   puts "#{saturation},#{brightness}"
+  puts "DEBUG: gh=#{group_history.inspect} s=#{saturation} b=#{brightness}"
+  puts "DEBUG: LED[0..5]=#{led_colors[0..5].map{|c| sprintf('%06X',c)}.join(',')}"
   led_strip.show_hsb_hex(*led_colors)
   sleep_ms(1)
 end
