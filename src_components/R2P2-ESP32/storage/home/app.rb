@@ -27,9 +27,7 @@ md_uart.clear_rx_buffer
 md_uart.write((0xC9).chr + (25).chr)
 
 button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
-last_button_state = 1
 button_debounce_count = 0
-cymbal_trigger = {flag: false}
 
 tick_count = 0
 group_history = [1, 1, 1]
@@ -49,9 +47,14 @@ loop do
     when 36..56
       md_uart.write((0x99).chr + cmd_byte.chr + (0x7F).chr)
       g = GT[cmd_byte] || 4
-      group_history.shift
-      group_history.push(g)
-      led_offset = (led_offset + 1) % led_colors.size
+      if g == 5
+        puts "FLASH!!"
+        led_strip.flash!(led_colors.size)
+      else
+        group_history.shift
+        group_history.push(g)
+        led_offset = (led_offset + 1) % led_colors.size
+      end
     when 1..10
       md_uart.write((0xB9).chr + 91.chr + (((cmd_byte - 1) * 127 / 9).to_i).chr)
     when 11..20
@@ -60,13 +63,12 @@ loop do
   end
 
   current_button = button.read
-  if last_button_state == 1 && current_button == 0 && button_debounce_count == 0
+  if current_button == 0 && button_debounce_count == 0
     puts "BUTTON!"
     md_uart.write((0x99).chr + 49.chr + (0x7F).chr)
-    group_history[group_history.size - 1] = 5
-    button_debounce_count = 10
+    led_strip.flash!(led_colors.size)
+    button_debounce_count = 50
   end
-  last_button_state = current_button
   button_debounce_count -= 1 if button_debounce_count > 0
 
   if tick_count % 10 == 0
@@ -78,41 +80,33 @@ loop do
     delta = accel_mag - 100
     saturation = (delta * delta / 20 + 127).clamp(50, 255)
     brightness = ((saturation - 127) * 81 / 128 + 30).clamp(15, 111)
+    puts "#{tick_count},#{saturation},#{brightness}"
   end
 
-  if group_history.last == 5
-    puts "<<FLASH BLOCK START>>"
-#    led_strip.flash!(60)
-    led_colors.map! { |c| (c & 0xFF0000) | 0x00FF }
-    group_history[group_history.size - 1] = (tick_count % 4) + 1
-    puts "<<FLASH BLOCK END>> gh=#{group_history.last} LED0=#{sprintf('%06X', led_colors[0])}"
-  else
-    puts "NORM: gh=#{group_history.inspect} offset=#{led_offset} LED0=#{sprintf('%06X', led_colors[0])}"
-    sb = (saturation << 8) | brightness
-    group_history.each do |g|
-      h = HUES[g] << 16 | sb
-      case g
-      when 1
-        10.times { |s|
-          led_colors[(s * 6 + led_offset) % led_colors.size] = h
-          led_colors[(s * 6 + 1 + led_offset) % led_colors.size] = h
-          led_colors[(s * 6 + 2 + led_offset) % led_colors.size] = h
-        }
-      when 2
-        10.times { |s|
-          led_colors[(s * 6 + 3 + led_offset) % led_colors.size] = h
-          led_colors[(s * 6 + 4 + led_offset) % led_colors.size] = h
-          led_colors[(s * 6 + 5 + led_offset) % led_colors.size] = h
-        }
-      when 3
-        12.times { |i| led_colors[(i * 5 + led_offset) % led_colors.size] = h }
-      when 4
-        6.times { |i| led_colors[(i * 10 + led_offset) % led_colors.size] = h }
-      else
-        puts "invalid group #{g},#{HUES[g]},#{h}"
-      end
+  sb = (saturation << 8) | brightness
+  group_history.each do |g|
+    h = HUES[g] << 16 | sb
+    case g
+    when 1
+      10.times { |s|
+        led_colors[(s * 6 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 1 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 2 + led_offset) % led_colors.size] = h
+      }
+    when 2
+      10.times { |s|
+        led_colors[(s * 6 + 3 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 4 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 5 + led_offset) % led_colors.size] = h
+      }
+    when 3
+      12.times { |i| led_colors[(i * 5 + led_offset) % led_colors.size] = h }
+    when 4
+      6.times { |i| led_colors[(i * 10 + led_offset) % led_colors.size] = h }
+    else
+      puts "invalid group #{g},#{HUES[g]},#{h}"
     end
   end
   led_strip.show_hsb_hex(*led_colors)
-  sleep_ms(100)
+  sleep_ms(1)
 end
