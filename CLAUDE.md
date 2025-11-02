@@ -69,14 +69,28 @@ For complex problems:
 
 ## Commands
 
-⚠️ **IMPORTANT**: Do NOT execute `rake` commands autonomously. User must run these commands manually.
+⚠️ **IMPORTANT**: Do NOT execute `rake` commands autonomously without user approval.
+
+**Permissions** (configured in `.claude/settings.local.json`):
+- ✅ **Allowed**: `rake monitor`, `rake check_env` (read-only operations)
+- ❓ **Ask first**: `rake build`, `rake cleanbuild`, `rake flash` (time-consuming/hardware operations)
+- 🚫 **Denied**: `rake init`, `rake update`, `rake buildall` (contain destructive git operations)
 
 ```bash
-rake init        # Initial setup
-rake build       # Build
-rake cleanbuild  # Clean build
-rake check_env   # Environment check
+rake init        # Initial setup (DENIED - contains git reset --hard)
+rake build       # Build (ASK - build operation)
+rake buildall    # Build all (DENIED - same as cleanbuild)
+rake cleanbuild  # Clean build (ASK - destructive clean)
+rake check_env   # Environment check (ALLOWED - read-only)
+rake flash       # Flash to ESP32 (ASK - hardware write)
+rake monitor     # Monitor serial output (ALLOWED - debug capture)
+rake update      # Update (DENIED - contains git reset --hard)
 ```
+
+**Rationale**:
+- `rake monitor` is allowed for direct debug information capture during development
+- Build/flash operations require confirmation to prevent accidental time-consuming operations
+- Operations containing `git reset --hard` are completely denied to protect work in progress
 
 ## Code Style
 
