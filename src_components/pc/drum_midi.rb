@@ -92,8 +92,8 @@ deck2_to_drum = {
 }
 
 # FX状態管理
-current_reverb_level = 5    # 0-9 (中間値)
-current_chorus_level = 5    # 0-9 (中間値)
+current_reverb_level = 9    # 0-9 (中間値)
+current_chorus_level = 9    # 0-9 (中間値)
 
 puts "\n=== 🥁 Enhanced Drum + FX Protocol にょん！==="
 puts ""
