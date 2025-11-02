@@ -35,7 +35,7 @@ class Group
     @hue = hue
   end
 
-  def self.create(name, hue, notes: [], rotatable: true, &block)
+  def self.create!(name, hue, notes: [], rotatable: true, &block)
     g = new(name, hue)
     g.define_singleton_method(:apply_leds, block) if block
     @@groups[name] = g
@@ -57,7 +57,7 @@ class Group
     @@rotation[tick % @@rotation.size]
   end
 
-  def self.advance_offset
+  def self.advance_offset!
     @@offset = (@@offset + 1) % LED_COUNT
   end
 
@@ -67,11 +67,11 @@ class Group
 end
 
 # グループ定義
-Group.create(:kick, 0, notes: [36]) { |colors, hsb| 10.times { |s| (0..2).each { |i| colors[(s * 6 + i + @@offset) % LED_COUNT] = hsb } } }
-Group.create(:snare, 128, notes: [38]) { |colors, hsb| 10.times { |s| (3..5).each { |i| colors[(s * 6 + i + @@offset) % LED_COUNT] = hsb } } }
-Group.create(:clap, 192, notes: [39]) { |colors, hsb| 12.times { |i| colors[(i * 5 + @@offset) % LED_COUNT] = hsb } }
-Group.create(:crash, 0, notes: [49, 52], rotatable: false)
-Group.create(:default, 64) { |colors, hsb| 6.times { |i| colors[(i * 10 + @@offset) % LED_COUNT] = hsb } }
+Group.create!(:kick, 0, notes: [36]) { |colors, hsb| 10.times { |s| (0..2).each { |i| colors[(s * 6 + i + @@offset) % LED_COUNT] = hsb } } }
+Group.create!(:snare, 128, notes: [38]) { |colors, hsb| 10.times { |s| (3..5).each { |i| colors[(s * 6 + i + @@offset) % LED_COUNT] = hsb } } }
+Group.create!(:clap, 192, notes: [39]) { |colors, hsb| 12.times { |i| colors[(i * 5 + @@offset) % LED_COUNT] = hsb } }
+Group.create!(:crash, 0, notes: [49, 52], rotatable: false)
+Group.create!(:default, 64) { |colors, hsb| 6.times { |i| colors[(i * 10 + @@offset) % LED_COUNT] = hsb } }
 
 # ===== ハードウェア初期化 =====
 
@@ -118,7 +118,7 @@ bright = 111
       synth.write(NOTE_ON.chr + cmd.chr + VEL_MAX.chr)
       hist.shift
       hist << Group.from_note(cmd)
-      Group.advance_offset
+      Group.advance_offset!
     when 1..10
       synth.write(CC.chr + 91.chr + (((cmd - 1) * 127 / 9).to_i).chr)
     when 11..20
