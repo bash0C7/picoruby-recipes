@@ -85,8 +85,9 @@ loop do
 #    led_strip.flash!(60)
     led_colors.map! { |c| (c & 0xFF0000) | 0x00FF }
     group_history[group_history.size - 1] = (tick_count % 4) + 1
-    puts "<<FLASH BLOCK END>>"
+    puts "<<FLASH BLOCK END>> gh=#{group_history.last} LEDs[0,10]=#{led_colors[0..9].map{|c| sprintf('%06X',c)}.join(',')}"
   else
+    puts "NORM: gh=#{group_history.inspect} offset=#{led_offset} LED0=#{sprintf('%06X', led_colors[0])}"
     sb = (saturation << 8) | brightness
     group_history.each do |g|
       h = HUES[g] << 16 | sb
