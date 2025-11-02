@@ -5,6 +5,7 @@
       "Bash(git log:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
+      "Bash(git add:*)",
       "Bash(git worktree:*)",
       "Bash(git branch:*)",
       "Bash(rake monitor:*)",
