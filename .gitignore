@@ -73,3 +73,6 @@ Thumbs.db
 # PicoRuby multi-version build system
 .cache/
 build/
+
+# IDE settings
+.vscode/
