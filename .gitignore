@@ -69,3 +69,7 @@ Thumbs.db
 
 /components/
 .claude/
+
+# PicoRuby multi-version build system
+.cache/
+build/
