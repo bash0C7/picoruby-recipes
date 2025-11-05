@@ -8,86 +8,103 @@ class Led
     @ws2812 = WS2812.new(RMTDriver.new(pin))
     @colors = Array.new(count)
 
-    @toggle_count = 0
-    @pattern = [
-      {r: 30, g: 5, b: 0},
-      {r: 0, g: 5, b: 30},
-    ]
-    deactive!
+    neutral!
   end
 
-  def toggle!
-    @toggle_count += 1
-    current = @toggle_count % 2
+  def neutral!
     @colors.size.times do |i|
-      @colors[i] = [@pattern[current][:r], @pattern[current][:g], @pattern[current][:b]] 
+      @colors[i] = [5, 10, 5] 
     end
     @ws2812.show_rgb(*@colors)
   end
 
   def active!
-    @toggle_count = 1
-    toggle!
+    @colors.size.times do |i|
+      @colors[i] = [50, 5, 5] 
+    end
+    @ws2812.show_rgb(*@colors)
   end
 
   def deactive!
-    @toggle_count = 0
-    toggle!
+    @colors.size.times do |i|
+      @colors[i] = [5, 5, 50] 
+    end
+    @ws2812.show_rgb(*@colors)
+  end
+
+  def off!
+    @colors.size.times do |i|
+      @colors[i] = [0, 0, ] 
+    end
+    @ws2812.show_rgb(*@colors)
   end
 end
 led = Led.new(27, 25)
 
-puts "-----------"
+puts "Basic GPIO IRQ"
 
-# Register IRQ handler for falling edge
 irq_instance = gpio.irq(GPIO::EDGE_FALL, capture: "My IRQ") do |peripheral, event_type, capture|
   puts "#{capture} -- Button pressed! Event: #{event_type}"
   led.active!
 end
 
-# Process IRQ events in main loop
-100.times do |i|
-  puts i if i % 10 == 0
-  count = IRQ.process  # Process up to 5 events
+30.times do |i|
+  puts i if i % 5 == 0
+  IRQ.process
   sleep_ms(100)
-  led.deactive!
+  led.neutral!
 end
 
-puts "-----------"
+puts "IRQ with Debouncing"
 irq_instance.unregister
 
-# Register IRQ with 50ms debounce to filter out button bounce
 irq_instance = gpio.irq(GPIO::EDGE_FALL, debounce: 50) do |peripheral, event_type|
   puts "Debounced button press detected"
   led.active!
 end
 
-# Process IRQ events in main loop
-100.times do |i|
-  puts i if i % 10 == 0
-  count = IRQ.process  # Process up to 5 events
+30.times do |i|
+  puts i if i % 5 == 0
+  IRQ.process
   sleep_ms(100)
-  led.deactive!
+  led.neutral!
 end
 
-puts "-----------"
+puts "Multiple Event Types"
+
+irq_instance = gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE) do |peripheral, event_type, capture|
+  case event_type
+  when GPIO::EDGE_FALL
+    puts "Button pressed"
+    led.active!
+  when GPIO::EDGE_RISE  
+    puts "Button released"
+    led.deactive!
+  end
+end
+
+30.times do |i|
+  puts i if i % 5 == 0
+  IRQ.process
+  sleep_ms(100)
+end
+
+puts "Level-Triggered IRQs"
 irq_instance.unregister
 
-# Handle low level (useful for active-low sensors)
 irq_instance = gpio.irq(GPIO::LEVEL_LOW) do |peripheral, event_type|
   puts "Sensor active"
   led.active!
 end
 
-# Process IRQ events in main loop
-100.times do |i|
-  puts i if i % 10 == 0
-  count = IRQ.process  # Process up to 5 events
+30.times do |i|
+  puts i if i % 5 == 0
+  IRQ.process 
   sleep_ms(100)
-  led.deactive!
+  led.neutral!
 end
 
-puts "-----------"
+puts "IRQ Management"
 
 # Check if IRQ is enabled
 puts irq_instance.enabled?  # => true
@@ -105,3 +122,26 @@ puts "-----------"
 previous_state = irq_instance.enable
 puts previous_state # => false
 puts irq_instance.enabled?  # => true
+
+puts "Manual Event Processing"
+irq_instance.unregister
+
+irq_instance = gpio.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE) do |peripheral, event_type, capture|
+  case event_type
+  when GPIO::EDGE_FALL
+    puts "Button pressed"
+    led.active!
+  when GPIO::EDGE_RISE  
+    puts "Button released"
+    led.deactive!
+  end
+end
+
+5.times do |i|
+  puts i if i % 5 == 0
+  count = IRQ.process(3)
+  puts "Processed #{count} events"
+  sleep_ms(1000)
+end
+
+led.off!
