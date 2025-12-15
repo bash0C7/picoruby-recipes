@@ -23,7 +23,7 @@ drum_pattern = [
   KICK, CLAP, SNARE, LOW_TOM
 ]
 
-STEP_INTERVAL = 125
+STEP_INTERVAL = 4
 
 md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
 sleep_ms(10)
@@ -31,19 +31,18 @@ sleep_ms(10)
 button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
 sleep_ms(10)
 
-irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {md_uart: md_uart, led_strip: led_strip}) do |button, event, cap|
-  puts "BUTTON!"
-  cap[:md_uart].write((0x99).chr + 49.chr + (0x7F).chr)
-  cap[:led_strip].flash!(led_colors.size)
-end
-
 led_strip = WS2812.new(RMTDriver.new(22))
 led_colors = Array.new(60, 0xC0960A)
 sleep_ms(10)
 
 md_uart.clear_rx_buffer
-md_uart.write((0xC9).chr + (25).chr)
 
+# Bank Select LSB (CC#32) = 16 (Power Kit)
+md_uart.write((0xB9).chr + (32).chr + (16).chr)
+sleep_ms(10)
+
+# Program Change = 0
+md_uart.write((0xC9).chr + (0).chr)
 
 tick_count = 0
 step = 0
@@ -51,6 +50,12 @@ group_history = [1, 1, 1]
 saturation = 255
 brightness = 111
 led_offset = 0
+
+irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {md_uart: md_uart, led_strip: led_strip}) do |button, event, cap|
+  puts "BUTTON!"
+  cap[:md_uart].write((0x99).chr + 49.chr + (0x7F).chr)
+  cap[:led_strip].flash!(led_colors.size)
+end
 
 loop do
   IRQ.process
