@@ -3,6 +3,7 @@ require 'ws2812'
 require 'irq'
 
 LED_COUNT = 25 #LED個数
+LED_PIN = 32 #ボードは22、本体外部は32
 
 GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
 HUES = [nil, 0, 128, 192, 64, 0]
@@ -33,7 +34,7 @@ sleep_ms(10)
 button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
 sleep_ms(10)
 
-led_strip = WS2812.new(RMTDriver.new(22))
+led_strip = WS2812.new(RMTDriver.new(LED_PIN))
 led_colors = Array.new(LED_COUNT, 0xC0960A)
 sleep_ms(10)
 
@@ -62,9 +63,6 @@ end
 loop do
   IRQ.process
   tick_count += 1
-
-  # LED配列初期化
-  LED_COUNT.times { |i| led_colors[i] = 0 }
 
   # STEP_INTERVAL tick ごとにドラム発音
   if tick_count % STEP_INTERVAL == 0

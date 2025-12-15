@@ -2,6 +2,9 @@ require 'uart'
 require 'ws2812'
 require 'irq'
 
+LED_COUNT = 60 #LED個数
+LED_PIN = 32 #ボードは22、本体外部は32
+
 GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
 HUES = [nil, 0, 128, 192, 64, 0]
 
@@ -31,8 +34,8 @@ sleep_ms(10)
 button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
 sleep_ms(10)
 
-led_strip = WS2812.new(RMTDriver.new(22))
-led_colors = Array.new(60, 0xC0960A)
+led_strip = WS2812.new(RMTDriver.new(LED_PIN))
+led_colors = Array.new(LED_COUNT, 0xC0960A)
 sleep_ms(10)
 
 md_uart.clear_rx_buffer
@@ -64,7 +67,7 @@ loop do
   # 125 tick ごとにドラム発音
   if tick_count % STEP_INTERVAL == 0
     note = drum_pattern[step % drum_pattern.size]
-    md_uart.write((0x99).chr + note.chr + (0x7F).chr)
+    md_uart.write((0x99).chr + note.chr + (0x60).chr)
 
     g = GT[note] || 4
     if g == 5
