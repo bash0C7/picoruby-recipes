@@ -63,7 +63,10 @@ loop do
   IRQ.process
   tick_count += 1
 
-  # 125 tick ごとにドラム発音
+  # LED配列初期化
+  LED_COUNT.times { |i| led_colors[i] = 0 }
+
+  # STEP_INTERVAL tick ごとにドラム発音
   if tick_count % STEP_INTERVAL == 0
     note = drum_pattern[step % drum_pattern.size]
     md_uart.write((0x99).chr + note.chr + (0x60).chr)
