@@ -26,7 +26,7 @@ drum_pattern = [
   KICK, CLAP, SNARE, LOW_TOM
 ]
 
-STEP_INTERVAL = 4
+STEP_INTERVAL = 6
 
 md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
 sleep_ms(10)
@@ -50,8 +50,8 @@ md_uart.write((0xC9).chr + (0).chr)
 tick_count = 0
 step = 0
 group_history = [1, 1, 1]
-saturation = 255
-brightness = 111
+saturation = 168
+brightness = 55
 led_offset = 0
 
 irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {md_uart: md_uart, led_strip: led_strip}) do |button, event, cap|
@@ -64,7 +64,7 @@ loop do
   IRQ.process
   tick_count += 1
 
-  # STEP_INTERVAL tick ごとにドラム発音
+  # 125 tick ごとにドラム発音
   if tick_count % STEP_INTERVAL == 0
     note = drum_pattern[step % drum_pattern.size]
     md_uart.write((0x99).chr + note.chr + (0x60).chr)
@@ -87,20 +87,21 @@ loop do
     h = HUES[g] << 16 | sb
     case g
     when 1
-      5.times { |s|
-        led_colors[(s * 5 + led_offset) % led_colors.size] = h
-        led_colors[(s * 5 + 1 + led_offset) % led_colors.size] = h
-        led_colors[(s * 5 + 2 + led_offset) % led_colors.size] = h
+      10.times { |s|
+        led_colors[(s * 6 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 1 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 2 + led_offset) % led_colors.size] = h
       }
     when 2
-      5.times { |s|
-        led_colors[(s * 5 + 3 + led_offset) % led_colors.size] = h
-        led_colors[(s * 5 + 4 + led_offset) % led_colors.size] = h
+      10.times { |s|
+        led_colors[(s * 6 + 3 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 4 + led_offset) % led_colors.size] = h
+        led_colors[(s * 6 + 5 + led_offset) % led_colors.size] = h
       }
     when 3
-      5.times { |i| led_colors[(i * 5 + led_offset) % led_colors.size] = h }
+      12.times { |i| led_colors[(i * 5 + led_offset) % led_colors.size] = h }
     when 4
-      5.times { |i| led_colors[(i * 5 + led_offset) % led_colors.size] = h }
+      6.times { |i| led_colors[(i * 10 + led_offset) % led_colors.size] = h }
     else
       puts "invalid group #{g},#{HUES[g]},#{h}"
     end
