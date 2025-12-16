@@ -2,8 +2,8 @@ require 'uart'
 require 'ws2812'
 require 'irq'
 
-LED_COUNT = 60 #LED個数
-LED_PIN = 32 #ボードは22、本体外部は32
+LED_COUNT = 25 #LED個数
+LED_PIN = 32 #ボードは22、本体外部は32、内蔵は27
 
 GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
 HUES = [nil, 0, 128, 192, 64, 0]
@@ -26,7 +26,7 @@ drum_pattern = [
   KICK, CLAP, SNARE, LOW_TOM
 ]
 
-STEP_INTERVAL = 4
+STEP_INTERVAL = 6
 
 md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 23, rxd_pin: 33)
 sleep_ms(10)
@@ -50,8 +50,8 @@ md_uart.write((0xC9).chr + (0).chr)
 tick_count = 0
 step = 0
 group_history = [1, 1, 1]
-saturation = 255
-brightness = 111
+saturation = 168
+brightness = 55
 led_offset = 0
 
 irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {md_uart: md_uart, led_strip: led_strip}) do |button, event, cap|
