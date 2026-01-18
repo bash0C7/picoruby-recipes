@@ -50,6 +50,7 @@ MRuby::CrossBuild.new("esp32") do |conf|
 
 
   conf.gem core: 'picoruby-irq'
+  conf.gem core: 'picoruby-iir_filter'
 
 
   conf.picoruby(alloc_libc: false)
