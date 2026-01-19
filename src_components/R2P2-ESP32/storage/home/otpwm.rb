@@ -11,7 +11,6 @@ class DPWM
 #    puts "duty #{d}"
   end
 end
-
 require 'ws2812'
 require 'gpio'
 require 'irq'
@@ -30,11 +29,24 @@ FREQ_MIN = 262
 FREQ_MAX = 1047
 FREQ_RANGE = FREQ_MAX - FREQ_MIN
 
-DEBUG = true
+DEBUG = false
+MUTE = true
 
 FREQS = [262,277,294,311,330,349,370,392,415,440,466,494,523,554,587,622,659,698,740,784,831,880,932,988,1047]
 
-speaker = if DEBUG
+if DEBUG
+  BASE_DUTY = 15
+  DUTY_MIN = 10
+  DUTY_MAX = 25
+  DUTY_DELTA_SCALE = 7
+else
+  BASE_DUTY = 35
+  DUTY_MIN = 20
+  DUTY_MAX = 50
+  DUTY_DELTA_SCALE = 15
+end
+
+speaker = if MUTE
   DPWM.new(SPEAKER_PIN, frequency: 262, duty: 1)
 else
   PWM.new(SPEAKER_PIN, frequency: 262, duty: 1)
@@ -64,7 +76,6 @@ end
 tick_count = 0
 current_freq = FREQ_MIN
 led_offset = 0
-base_duty = 35
 current_duty = 1
 saturation = 200
 brightness = 50
@@ -81,7 +92,7 @@ loop do
       base_freq = FREQ_MIN + (FREQ_MAX - distance) * FREQ_RANGE / (DIST_MAX - DIST_MIN)
       base_freq = base_freq.clamp(FREQ_MIN, FREQ_MAX)
       current_freq = base_freq
-      current_duty = base_duty
+      current_duty = BASE_DUTY
       
       note_idx = ((DIST_MAX - distance) * 24 / (DIST_MAX - DIST_MIN)).to_i.clamp(0, 24)
       led_offset = (led_offset + 1) % LED_COUNT
@@ -99,8 +110,8 @@ loop do
       vibrato = (accel_data[:y] * 20).to_i
       speaker.frequency((current_freq + vibrato).clamp(FREQ_MIN, FREQ_MAX))
       
-      duty_delta = (accel_data[:x] * 15).to_i
-      duty = (base_duty + duty_delta).clamp(20, 50)
+      duty_delta = (accel_data[:x] * DUTY_DELTA_SCALE).to_i
+      duty = (BASE_DUTY + duty_delta).clamp(DUTY_MIN, DUTY_MAX)
       speaker.duty(duty)
     end
     
