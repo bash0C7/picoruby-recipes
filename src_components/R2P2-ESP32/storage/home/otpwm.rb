@@ -1,3 +1,17 @@
+class DPWM
+  def initialize(pin, param = {})
+#    puts "new #{pin}, #{param.to_s}"
+  end
+
+  def frequency(f)
+#    puts "frequency #{f}"
+  end
+
+  def duty(d)
+#    puts "duty #{d}"
+  end
+end
+
 require 'ws2812'
 require 'gpio'
 require 'irq'
@@ -19,20 +33,6 @@ FREQ_RANGE = FREQ_MAX - FREQ_MIN
 DEBUG = true
 
 FREQS = [262,277,294,311,330,349,370,392,415,440,466,494,523,554,587,622,659,698,740,784,831,880,932,988,1047]
-
-class DPWM
-  def initialize(pin, param = {})
-#    puts "new #{pin}, #{param.to_s}"
-  end
-
-  def frequency(f)
-#    puts "frequency #{f}"
-  end
-
-  def duty(d)
-#    puts "duty #{d}"
-  end
-end
 
 speaker = if DEBUG
   DPWM.new(SPEAKER_PIN, frequency: 262, duty: 1)
