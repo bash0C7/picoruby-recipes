@@ -11,6 +11,7 @@ class DPWM
 #    puts "duty #{d}"
   end
 end
+require 'uart'
 require 'ws2812'
 require 'gpio'
 require 'irq'
@@ -21,18 +22,38 @@ require 'vl53l0x'
 require 'iir_filter'
 
 LED_COUNT = 30
-LED_PIN = 22
-SPEAKER_PIN = 32
+LED_PIN = 19
+SPEAKER_PIN = 33
 DIST_MIN = 20
 DIST_MAX = 170
 FREQ_MIN = 262
 FREQ_MAX = 1047
 FREQ_RANGE = FREQ_MAX - FREQ_MIN
 
-DEBUG = false
-MUTE = true
+DEBUG = true
+MUTE = false
 
-FREQS = [262,277,294,311,330,349,370,392,415,440,466,494,523,554,587,622,659,698,740,784,831,880,932,988,1047]
+KICK = 36
+SNARE = 38
+CLAP = 39
+HI_HAT_C = 42
+HI_HAT_O = 46
+HI_TOM = 50
+MID_TOM = 47
+LOW_TOM = 41
+CRASH = 49
+
+GT = {36=>1, 38=>2, 39=>3, 49=>5, 50=>4, 47=>4, 41=>4, 42=>3, 46=>3}
+HUES = [nil, 0, 128, 192, 64, 0]
+
+drum_pattern = [
+  KICK, HI_HAT_C, SNARE, HI_HAT_C,
+  KICK, HI_HAT_C, SNARE, HI_HAT_O,
+  KICK, MID_TOM, SNARE, HI_HAT_C,
+  KICK, CLAP, SNARE, LOW_TOM
+]
+
+STEP_INTERVAL = 125
 
 if DEBUG
   BASE_DUTY = 15
@@ -45,6 +66,9 @@ else
   DUTY_MAX = 50
   DUTY_DELTA_SCALE = 15
 end
+
+md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: 26, rxd_pin: 32)
+sleep_ms(10)
 
 speaker = if MUTE
   DPWM.new(SPEAKER_PIN, frequency: 262, duty: 1)
@@ -69,16 +93,28 @@ sleep_ms(100)
 
 distance_filter = IIRFilter.new
 
-irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {led_strip: led_strip}) do |btn, ev, cap|
+md_uart.clear_rx_buffer
+md_uart.write((0xB9).chr + (32).chr + (16).chr)
+sleep_ms(10)
+md_uart.write((0xC9).chr + (0).chr)
+sleep_ms(10)
+
+irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {md_uart: md_uart, led_strip: led_strip}) do |btn, ev, cap|
+  cap[:md_uart].write((0x99).chr + CRASH.chr + (0x7F).chr)
   cap[:led_strip].flash!(LED_COUNT)
 end
 
 tick_count = 0
+drum_step = 0
 current_freq = FREQ_MIN
 led_offset = 0
 current_duty = 1
 saturation = 200
 brightness = 50
+note_idx = 0
+group_history = [1, 1, 1]
+drum_saturation = 168
+drum_brightness = 55
 
 loop do
   IRQ.process
@@ -90,8 +126,7 @@ loop do
 
     if distance > 0 && distance >= DIST_MIN && distance <= DIST_MAX
       base_freq = FREQ_MIN + (FREQ_MAX - distance) * FREQ_RANGE / (DIST_MAX - DIST_MIN)
-      base_freq = base_freq.clamp(FREQ_MIN, FREQ_MAX)
-      current_freq = base_freq
+      current_freq = base_freq.clamp(FREQ_MIN, FREQ_MAX)
       current_duty = BASE_DUTY
       
       note_idx = ((DIST_MAX - distance) * 24 / (DIST_MAX - DIST_MIN)).to_i.clamp(0, 24)
@@ -105,7 +140,7 @@ loop do
     accel_data = accel_sensor.acceleration
     
     if current_duty == 1
-      speaker.duty(current_duty)
+      speaker.duty(1)
     else
       vibrato = (accel_data[:y] * 20).to_i
       speaker.frequency((current_freq + vibrato).clamp(FREQ_MIN, FREQ_MAX))
@@ -121,16 +156,60 @@ loop do
     brightness = (accel_mag / 2 + 30).clamp(20, 80)
   end
   
+  if tick_count % STEP_INTERVAL == 0
+    note = drum_pattern[drum_step % drum_pattern.size]
+    md_uart.write((0x99).chr + note.chr + (0x60).chr)
+
+    g = GT[note] || 4
+    if g == 5
+      led_strip.flash!(LED_COUNT)
+    else
+      group_history.shift
+      group_history.push(g)
+    end
+
+    drum_step += 1
+  end
+  
   if current_duty == 1
     LED_COUNT.times { |i| led_colors[i] = 0 }
   else
-    hue = (note_idx * 384 / 24) % 384
+    melody_hue = (note_idx * 384 / 24) % 384
     sb = (saturation << 8) | brightness
-    color = (hue << 16) | sb
+    melody_color = (melody_hue << 16) | sb
     
     10.times { |i|
-      led_colors[(i * 3 + led_offset) % LED_COUNT] = color
+      led_colors[(i * 3 + led_offset) % LED_COUNT] = melody_color
     }
+  end
+  
+  drum_sb = (drum_saturation << 8) | drum_brightness
+  group_history.each do |g|
+    h = HUES[g] << 16 | drum_sb
+    case g
+    when 1
+      5.times { |s|
+        idx = (s * 6 + led_offset) % LED_COUNT
+        led_colors[idx] = h if led_colors[idx] == 0
+        led_colors[(idx + 1) % LED_COUNT] = h if led_colors[(idx + 1) % LED_COUNT] == 0
+      }
+    when 2
+      5.times { |s|
+        idx = (s * 6 + 3 + led_offset) % LED_COUNT
+        led_colors[idx] = h if led_colors[idx] == 0
+        led_colors[(idx + 1) % LED_COUNT] = h if led_colors[(idx + 1) % LED_COUNT] == 0
+      }
+    when 3
+      6.times { |i|
+        idx = (i * 5 + led_offset) % LED_COUNT
+        led_colors[idx] = h if led_colors[idx] == 0
+      }
+    when 4
+      3.times { |i|
+        idx = (i * 10 + led_offset) % LED_COUNT
+        led_colors[idx] = h if led_colors[idx] == 0
+      }
+    end
   end
   
   led_strip.show_hsb_hex(*led_colors)
