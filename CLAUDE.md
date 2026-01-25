@@ -146,6 +146,30 @@ rake update      # Update (DENIED - contains git reset --hard)
 - Ruby apps: `src_components/R2P2-ESP32/storage/home/`
 - Build config: `build_config/xtensa-esp.rb`
 
+## Port Configuration
+
+### Available Ports
+- **本体Grove**: GPIO26 (TX), GPIO32 (RX) - UART/I2C標準ポート
+- **J3**: GPIO25 (SDA), GPIO21 (SCL) - I2C専用（MPU6886共有）
+- **J4**: GPIO33 - PWM/アナログ
+- **PortD/J5**: GPIO22, GPIO19 - UART/GPIO/WS2812用途
+
+### PortD/J5 UART設定（動作確認済み）
+```ruby
+UART_TX_PIN = 22  # 送信ピン
+UART_RX_PIN = 19  # 受信ピン
+```
+
+**UART通信の接続原理**:
+- ATOM Matrix TX → MIDI Unit RX（クロスオーバー接続）
+- ATOM Matrix RX ← MIDI Unit TX
+- TX/RXを逆にすると通信不能
+
+**ピン識別方法**:
+1. 拡張ボードのシルクスクリーン印刷を確認
+2. 実際にTX/RXを入れ替えて動作確認
+3. ATOM Lite標準（GPIO22=TX, GPIO19=RX）から類推
+
 ## Auto-Referenced Information
 
 Claude automatically loads detailed information when asked about:
@@ -316,9 +340,14 @@ M5Stack ATOM Matrix上でPicoRuby(mruby/c)を使用し、MIDI音源モジュー�
 - LED: WS2812 LEDストリップ 30個
 
 ### ピン配置
-- 本体Grove: GPIO26(TX), GPIO32(RX) → MIDI Unit
-- J5 (シリアル): GPIO22 → WS2812 LEDストリップ
+- **PortD/J5 (UART)**: GPIO22(TX), GPIO19(RX) → MIDI Unit
+- **PortD/J5 (WS2812)**: GPIO32 → WS2812 LEDストリップ（本実装）
 - ボタン: GPIO39（ATOM Matrix内蔵）
+
+**ポート識別方法**:
+- 公式資料なし：実物のシルクスクリーン印刷確認、または試行錯誤で識別
+- 動作確認済み：TX=22, RX=19 でMIDI通信成功
+- 参考：本体Grove (GPIO26=TX, GPIO32=RX) も使用可能
 
 ## 機能仕様
 
@@ -381,8 +410,9 @@ M5Stack ATOM Matrix上でPicoRuby(mruby/c)を使用し、MIDI音源モジュー�
 ```ruby
 DEBUG = false  # true=デバッグ出力、false=出力なし
 
-MIDI_TX_PIN = 26      # MIDI送信ピン
-MIDI_RX_PIN = 32      # MIDI受信ピン
+MIDI_TX_PIN = 22      # MIDI送信ピン（PortD/J5）
+MIDI_RX_PIN = 19      # MIDI受信ピン（PortD/J5）
+# 注：本体Groveを使用する場合は TX=26, RX=32
 DRUM_INTERVAL = 2     # ドラム発音間隔(ms)。小さくすると速く
 
 PATTERN = [  # 16ステップドラムパターン
