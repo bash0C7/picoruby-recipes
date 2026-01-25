@@ -193,3 +193,261 @@ No need to memorize! Auto-loaded only when needed.
 ---
 
 **Note**: Keep this config file concise. Detailed information auto-loads only when needed.
+
+# @src_components/R2P2-ESP32/storage/home/otpwm.rb
+
+PWM版ノイズ・アンビエント楽器 実装仕様
+
+## プロジェクト概要
+M5Stack ATOM Matrix上でPicoRuby(mruby/c)を使用し、距離センサーと加速度センサーを用いた電子ノイズ楽器を実装する。攻撃的な電子音と連動したアンビエントなLED演出が特徴。
+
+## ハードウェア構成
+### デバイス
+- メインボード: M5Stack ATOM Matrix
+- 拡張ボード: ATOM Matrix用拡張ボード
+- 距離センサー: VL53L0X（Unit ToF）
+- 加速度センサー: MPU6886（ATOM Matrix内蔵）
+- スピーカー: PWM制御Grove互換スピーカー
+- LED: WS2812 LEDストリップ 30個
+
+### ピン配置
+- J3 (I2C): SDA=GPIO25, SCL=GPIO21 → VL53L0X + MPU6886
+- J4 (アナログ): GPIO33 → PWMスピーカー
+- J5 (シリアル): GPIO22 → WS2812 LEDストリップ
+- ボタン: GPIO39（ATOM Matrix内蔵）
+
+## 機能仕様
+
+### 音響制御
+1. **距離→周波数マッピング**
+   - 測定範囲: 20mm〜250mm
+   - 周波数範囲: 100Hz〜2000Hz（ノイズミュージック的な広域）
+   - マッピング: 近い=低音、遠い=高音
+   - 範囲外: duty=1で極小音量（連続発振維持）
+
+2. **加速度センサー→音色制御**
+   - X軸: duty比変化（25%〜60%、音量・音色変化）
+   - Y軸: 周波数ビブラート（±50Hz）
+   - Z軸: カットオフ風効果（dutyに微調整を追加）
+
+3. **平滑化処理**
+   - 距離: IIRFilterで平滑化
+   - duty変化: DUTY_SMOOTH_FACTOR=3で滑らか遷移
+
+### LED演出
+1. **ダイナミック波形表現**
+   - 全30個のLEDを使用
+   - 色相: 周波数に連動（100Hz=0度、2000Hz=384度）
+   - 彩度: duty比に連動
+   - 輝度: duty比に連動
+   - 波形オフセット: 毎フレーム+1で流れる演出
+   - 加速度影響: XYZ合計値で色相に揺らぎ追加
+
+2. **ボタン操作**
+   - ボタン押下: LEDフラッシュのみ（音響変化なし）
+
+## 技術的制約
+
+### PicoRuby/mruby/c制約
+- メモリ制約が厳しい
+- 大きな配列操作は避ける
+- 浮動小数点演算は整数演算で代替
+- クラス化は最小限（必要な場合のみ）
+- 例外処理は使用しない
+- bundler、RubyGems.org不使用
+
+### コーディング規約
+- シンプルに書き下す（原則として複雑な関数化・クラス化を避ける）
+- 日本語コメントで主要定数を解説
+- グローバル定数は冒頭にまとめる
+- DEBUGフラグで音量・ログ出力を制御
+- MUTEフラグでPWM音出力を制御
+
+## パラメータ設定
+
+### 音響パラメータ
+```rubyDEBUG = false  # true=小音量+デバッグ出力、false=通常音量
+MUTE = false   # true=音を出さずログ出力のみ、false=実際に音を出すDIST_MIN = 20         # 最小距離(mm)
+DIST_MAX = 250        # 最大距離(mm)
+FREQ_MIN = 100        # 最低周波数(Hz)
+FREQ_MAX = 2000       # 最高周波数(Hz)BASE_DUTY = DEBUG ? 15 : 40           # 基準duty比(%)
+DUTY_MIN = DEBUG ? 10 : 25            # 最小duty比(%)
+DUTY_MAX = DEBUG ? 25 : 60            # 最大duty比(%)
+DUTY_DELTA_SCALE = DEBUG ? 10 : 20    # X軸→duty変化の感度VIBRATO_SCALE = 50                    # Y軸→ビブラート強さ(Hz)
+CUTOFF_SCALE = 30                     # Z軸→カットオフ風効果
+DUTY_SMOOTH_FACTOR = 3                # duty変化の滑らかさ
+
+### LEDパラメータ
+```rubyLED_PIN = 22
+LED_COUNT = 30
+
+## 実装要件
+
+### クラス設計
+1. **NoiseInstrument**: 距離・加速度→音響制御
+   - `update_distance()`: 距離測定・周波数設定
+   - `update_accel()`: 加速度測定・duty/ビブラート制御
+
+2. **AmbientLEDVisualizer**: LED演出
+   - `update()`: 周波数・duty・加速度からLED色計算
+   - `show()`: LED表示
+   - `flash()`: ボタン用フラッシュ
+
+### メインループ処理
+- 1msごと: 距離測定・周波数更新
+- 2msごと: 加速度測定・duty更新・LED更新
+- IRQ: ボタン割り込み処理
+
+## デバッグ用DPWMクラス
+MUTEモード用のダミークラス。PWMの代わりにログ出力のみ行う。
+
+## 期待される動作
+- 手を近づけると低い音
+- 手を遠ざけると高い攻撃的な電子音
+- 本体を傾けると音色が変化
+- LEDは音に連動して波打つように色変化
+- ボタンでLEDフラッシュ
+
+## 納品物
+- 単一の.rbファイル
+- 冒頭にDEBUG/MUTEフラグ配置
+- 主要定数に日本語コメント
+- クラスは2つ（NoiseInstrument、AmbientLEDVisualizer）
+
+# @src_components/R2P2-ESP32/storage/home/otmidi.rb 
+
+MIDI版リズムマシン 実装仕様
+
+## プロジェクト概要
+M5Stack ATOM Matrix上でPicoRuby(mruby/c)を使用し、MIDI音源モジュールを制御する自動ドラムマシンを実装する。リズムパターンに同期したLED演出が特徴。
+
+## ハードウェア構成
+### デバイス
+- メインボード: M5Stack ATOM Matrix
+- MIDI音源: SAM2695等のMIDI Unitモジュール
+- LED: WS2812 LEDストリップ 30個
+
+### ピン配置
+- 本体Grove: GPIO26(TX), GPIO32(RX) → MIDI Unit
+- J5 (シリアル): GPIO22 → WS2812 LEDストリップ
+- ボタン: GPIO39（ATOM Matrix内蔵）
+
+## 機能仕様
+
+### MIDI制御
+1. **ドラムパターン自動演奏**
+   - チャンネル10（ドラム専用）使用
+   - 16ステップパターンをループ再生
+   - テンポ: DRUM_INTERVAL（デフォルト2ms/ステップ）
+
+2. **使用ドラム音**
+   - KICK (36): キックドラム
+   - SNARE (38): スネアドラム
+   - CLAP (39): ハンドクラップ
+   - HI_HAT_CLOSE (42): クローズドハイハット
+   - HI_HAT_OPEN (46): オープンハイハット
+   - HIGH_TOM (50): ハイタム
+   - MID_TOM (47): ミッドタム
+   - LOW_TOM (41): ロータム
+   - CRASH (49): クラッシュシンバル（ボタン用）
+
+3. **MIDI初期化**
+   - Bank Select LSB (CC#32) = 16 (Power Kit)
+   - Program Change = 0
+
+### LED演出
+1. **リズムパターン同期**
+   - ドラム音ごとにグループ分け（GT定数）
+   - グループ履歴（直近3音）を保持
+   - 各グループに固有の色相・LED配置パターン
+
+2. **色相配列**
+   - Group 1: 赤系（0度）
+   - Group 2: シアン系（128度）
+   - Group 3: マゼンタ系（192度）
+   - Group 4: 黄系（64度）
+   - Group 5: フラッシュ専用
+
+3. **ボタン操作**
+   - ボタン押下: クラッシュシンバル発音 + LEDフラッシュ
+
+## 技術的制約
+
+### PicoRuby/mruby/c制約
+- メモリ制約が厳しい
+- 大きな配列操作は避ける
+- 浮動小数点演算は整数演算で代替
+- クラス化は最小限（必要な場合のみ）
+- 例外処理は使用しない
+- bundler、RubyGems.org不使用
+
+### コーディング規約
+- シンプルに書き下す（原則として複雑な関数化・クラス化を避ける）
+- 日本語コメントで主要定数を解説
+- グローバル定数は冒頭にまとめる
+- DEBUGフラグでログ出力を制御
+
+## パラメータ設定
+
+### MIDIパラメータ
+```ruby
+DEBUG = false  # true=デバッグ出力、false=出力なし
+
+MIDI_TX_PIN = 26      # MIDI送信ピン
+MIDI_RX_PIN = 32      # MIDI受信ピン
+DRUM_INTERVAL = 2     # ドラム発音間隔(ms)。小さくすると速く
+
+PATTERN = [  # 16ステップドラムパターン
+  KICK, HI_HAT_CLOSE, SNARE, HI_HAT_CLOSE,
+  KICK, HI_HAT_CLOSE, SNARE, HI_HAT_OPEN,
+  KICK, MID_TOM, SNARE, HI_HAT_CLOSE,
+  KICK, CLAP, SNARE, LOW_TOM
+]
+
+GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}  # ドラム音→グループマッピング
+```
+
+### LEDパラメータ
+```ruby
+LED_PIN = 22
+LED_COUNT = 30
+
+HUES_DRUM = [nil, 0, 128, 192, 64, 0]  # グループ別色相配列
+```
+
+## 実装要件
+
+### クラス設計
+1. **DrumMachine**: MIDIドラム制御
+   - `update()`: 次のドラム音を発音、グループ履歴更新
+   - `crash()`: クラッシュシンバル発音（ボタン用）
+   - `group_history`: 直近3音のグループ履歴を返す
+
+2. **RhythmLEDVisualizer**: LED演出
+   - `update(group_history)`: グループ履歴からLED色計算
+   - `show()`: LED表示
+   - `flash()`: ボタン用フラッシュ
+
+### メインループ処理
+- DRUM_INTERVALごと: ドラムパターン進行・発音
+- 1msごと: LED更新
+- IRQ: ボタン割り込み処理
+
+## UART通信仕様
+- ボーレート: 31250（MIDI標準）
+- Note On: 0x99 + note + velocity
+- Bank Select: 0xB9 + 32 + 16
+- Program Change: 0xC9 + 0
+
+## 期待される動作
+- 起動と同時にドラムパターン自動演奏開始
+- リズムに合わせてLEDが色変化
+- ボタンでクラッシュシンバル+フラッシュ
+- 加速度センサーは使用しない
+
+## 納品物
+- 単一の.rbファイル
+- 冒頭にDEBUGフラグ配置
+- 主要定数に日本語コメント
+- クラスは2つ（DrumMachine、RhythmLEDVisualizer）
+
