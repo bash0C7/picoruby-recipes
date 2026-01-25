@@ -144,37 +144,12 @@ rake update      # Update (DENIED - contains git reset --hard)
 - Ruby apps: `src_components/R2P2-ESP32/storage/home/`
 - Build config: `build_config/xtensa-esp.rb`
 
-## Finger Drum Project
-
-Real-time drum performance system using DDJ-400 controller + ATOM Matrix.
-
-**Detailed Information**: See `.claude/skills/finger-drum/SKILL.md`
-
-**PicoRuby Application (Auto-executed on boot)**:
-- **Entry Point**: `src_components/R2P2-ESP32/storage/home/app.rb` (main application, auto-runs on ESP32 startup)
-  - Handles UART communication with PC
-  - Controls MIDI output to synthesizer
-  - Manages LED visualization (WS2812 strip, 60 LEDs)
-  - Reads accelerometer (MPU6886) for dynamic color effects
-  - Processes button input (GPIO 39) for crash cymbal trigger
-
-**Related Implementation Files**:
-- Design/README: `src_components/pc/drum_readme.rb`
-- Protocol spec: `src_components/pc/drum_protcolspec.md`
-- PC MIDI version: `src_components/pc/drum_midi.rb`
-- PC keyboard version: `src_components/pc/drum_pc.rb`
-- PicoRuby compact reference: `src_components/R2P2-ESP32/storage/home/rwcc.rb`
-- PicoRuby full reference: `src_components/R2P2-ESP32/storage/home/rwc.rb`
-
-Auto-loads when keywords mentioned: finger drum, DDJ-400, drum performance, MIDI performance
-
 ## Auto-Referenced Information
 
 Claude automatically loads detailed information when asked about:
 
 - **GPIO, LED, sensors** → Hardware specifications auto-referenced
 - **PicoRuby constraints, memory optimization** → Development guide auto-referenced
-- **Finger Drum** → Finger drum system info auto-referenced
 
 No need to memorize! Auto-loaded only when needed.
 
@@ -260,26 +235,37 @@ M5Stack ATOM Matrix上でPicoRuby(mruby/c)を使用し、距離センサーと�
 - シンプルに書き下す（原則として複雑な関数化・クラス化を避ける）
 - 日本語コメントで主要定数を解説
 - グローバル定数は冒頭にまとめる
-- DEBUGフラグで音量・ログ出力を制御
+- DEBUGフラグでログ出力を制御
 - MUTEフラグでPWM音出力を制御
 
 ## パラメータ設定
 
 ### 音響パラメータ
-```rubyDEBUG = false  # true=小音量+デバッグ出力、false=通常音量
-MUTE = false   # true=音を出さずログ出力のみ、false=実際に音を出すDIST_MIN = 20         # 最小距離(mm)
+```ruby
+DEBUG = true   # true=デバッグ出力、false=デバッグ出力なし
+MUTE = false   # true=音を出さず数字を表示、false=実際に音を出す
+
+DIST_MIN = 20         # 最小距離(mm)
 DIST_MAX = 250        # 最大距離(mm)
 FREQ_MIN = 100        # 最低周波数(Hz)
-FREQ_MAX = 2000       # 最高周波数(Hz)BASE_DUTY = DEBUG ? 15 : 40           # 基準duty比(%)
-DUTY_MIN = DEBUG ? 10 : 25            # 最小duty比(%)
-DUTY_MAX = DEBUG ? 25 : 60            # 最大duty比(%)
-DUTY_DELTA_SCALE = DEBUG ? 10 : 20    # X軸→duty変化の感度VIBRATO_SCALE = 50                    # Y軸→ビブラート強さ(Hz)
-CUTOFF_SCALE = 30                     # Z軸→カットオフ風効果
-DUTY_SMOOTH_FACTOR = 3                # duty変化の滑らかさ
+FREQ_MAX = 2000       # 最高周波数(Hz)
+
+BASE_DUTY = 40        # 基準duty比(%)
+DUTY_MIN = 25         # 最小duty比(%)
+DUTY_MAX = 60         # 最大duty比(%)
+DUTY_DELTA_SCALE = 20 # X軸→duty変化の感度
+
+VIBRATO_SCALE = 50    # Y軸→ビブラート強さ(Hz)
+CUTOFF_SCALE = 30     # Z軸→カットオフ風効果
+
+DUTY_SMOOTH_FACTOR = 3 # duty変化の滑らかさ
+```
 
 ### LEDパラメータ
-```rubyLED_PIN = 22
+```ruby
+LED_PIN = 22
 LED_COUNT = 30
+```
 
 ## 実装要件
 
@@ -294,7 +280,7 @@ LED_COUNT = 30
    - `flash()`: ボタン用フラッシュ
 
 ### メインループ処理
-- 1msごと: 距離測定・周波数更新
+- 毎フレーム(1ms): 距離測定・周波数更新
 - 2msごと: 加速度測定・duty更新・LED更新
 - IRQ: ボタン割り込み処理
 
@@ -314,7 +300,7 @@ MUTEモード用のダミークラス。PWMの代わりにログ出力のみ行�
 - 主要定数に日本語コメント
 - クラスは2つ（NoiseInstrument、AmbientLEDVisualizer）
 
-# @src_components/R2P2-ESP32/storage/home/otmidi.rb 
+# @src_components/R2P2-ESP32/storage/home/otmidi.rb
 
 MIDI版リズムマシン 実装仕様
 
@@ -450,4 +436,3 @@ HUES_DRUM = [nil, 0, 128, 192, 64, 0]  # グループ別色相配列
 - 冒頭にDEBUGフラグ配置
 - 主要定数に日本語コメント
 - クラスは2つ（DrumMachine、RhythmLEDVisualizer）
-

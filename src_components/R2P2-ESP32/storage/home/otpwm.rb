@@ -1,13 +1,18 @@
-DEBUG = false  # デバッグモード。true=小音量+デバッグ出力、false=通常音量
-MUTE = false   # PWM消音モード。true=音を出さずログ出力のみ、false=実際に音を出す
+DEBUG = true  # デバッグモード。true=デバッグ出力、false=デバッグ出力なし
+MUTE = false   # PWM消音モード。true=音を出さず数字を表示 false=実際に音を出す
 
 class DPWM
   def initialize(pin, param = {})
+    puts "new #{pin}, #{param.to_s}"
     @mute = param[:mute]
   end
+
   def frequency(f)
+    puts "frequency #{f}" if @mute
   end
+
   def duty(d)
+    puts "duty #{d}" if @mute
   end
 end
 
@@ -30,10 +35,10 @@ class NoiseInstrument
   FREQ_MIN = 100        # 最低周波数(Hz)。ノイズ的な低音
   FREQ_MAX = 2000       # 最高周波数(Hz)。攻撃的な高音
   
-  BASE_DUTY = DEBUG ? 15 : 40           # 基準duty比(%)
-  DUTY_MIN = DEBUG ? 10 : 25            # 最小duty比(%)
-  DUTY_MAX = DEBUG ? 25 : 60            # 最大duty比(%)
-  DUTY_DELTA_SCALE = DEBUG ? 10 : 20    # X軸→duty変化の感度
+  BASE_DUTY = 40           # 基準duty比(%)
+  DUTY_MIN = 25            # 最小duty比(%)
+  DUTY_MAX = 60            # 最大duty比(%)
+  DUTY_DELTA_SCALE = 20    # X軸→duty変化の感度
   
   VIBRATO_SCALE = 50                    # Y軸→ビブラート強さ(Hz)
   CUTOFF_SCALE = 30                     # Z軸→カットオフ風効果(duty微調整)
@@ -163,17 +168,15 @@ loop do
   IRQ.process
   tick_count += 1
   
-  if tick_count % 1 == 0
-    instrument.update_distance
-  end
+  instrument.update_distance
   
   if tick_count % 2 == 0
     accel_data = instrument.update_accel
     led_viz.update(instrument.current_freq, instrument.current_duty, 
                    accel_data[:x], accel_data[:y], accel_data[:z])
+    led_viz.show
   end
   
-  led_viz.show
   sleep_ms(1)
 end
 
