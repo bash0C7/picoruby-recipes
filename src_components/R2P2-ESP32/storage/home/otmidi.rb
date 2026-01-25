@@ -73,39 +73,20 @@ class RhythmLEDVisualizer
   
   def update(group_history, step)
     # ステップに基づいてオフセットを計算（毎拍ひとつずつシフト）
-    pattern_offset = step % 3
+    pattern_offset = step % LED_COUNT
 
     saturation = 255
     brightness = 80
     sb = (saturation << 8) | brightness
 
-    # LED を一度クリアして新たに描画
-    LED_COUNT.times { |i| @led_colors[i] = 0 }
+    # 全 LED に対して group_history の色を循環させる
+    LED_COUNT.times do |i|
+      # 各 LED にオフセット付きで group_history から色を選ぶ
+      color_idx = (i + pattern_offset) % group_history.size
+      g = group_history[color_idx]
+      hue = HUES_DRUM[g]
 
-    group_history.each do |g|
-      h = HUES_DRUM[g] << 16 | sb
-      case g
-      when 1
-        10.times { |s|
-          idx = (s * 3 + pattern_offset) % LED_COUNT
-          @led_colors[idx] = h
-        }
-      when 2
-        10.times { |s|
-          idx = (s * 3 + pattern_offset + 1) % LED_COUNT
-          @led_colors[idx] = h
-        }
-      when 3
-        10.times { |s|
-          idx = (s * 3 + pattern_offset + 2) % LED_COUNT
-          @led_colors[idx] = h
-        }
-      when 4
-        6.times { |i|
-          idx = (i * 5 + pattern_offset) % LED_COUNT
-          @led_colors[idx] = h
-        }
-      end
+      @led_colors[i] = (hue << 16) | sb
     end
   end
   
@@ -150,7 +131,7 @@ loop do
 
   led_viz.update(drum.group_history, drum.step)
   led_viz.show
-  sleep_ms(50)
+  sleep_ms(85)
 end
 
 irq.unregister
