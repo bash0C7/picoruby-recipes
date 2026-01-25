@@ -9,7 +9,9 @@
       "Bash(git worktree:*)",
       "Bash(git branch:*)",
       "Bash(rake monitor:*)",
-      "Bash(rake check_env:*)"
+      "Bash(rake check_env:*)",
+      "WebFetch(domain:docs.espressif.com)",
+      "WebFetch(domain:www.samgalope.dev)"
     ],
     "deny": [
       "Bash(git push:*)",

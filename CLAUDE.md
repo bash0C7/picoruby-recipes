@@ -2,6 +2,8 @@
 
 ATOM Matrix (ESP32-PICO-D4) + R2P2-ESP32 (PicoRuby runtime) embedded development configuration.
 
+ビルドは人間が絶対に行う。ClaudeはNG。
+
 ## Core Principles
 
 <simplicity_first>
