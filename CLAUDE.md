@@ -154,21 +154,29 @@ rake update      # Update (DENIED - contains git reset --hard)
 - **J4**: GPIO33 - PWM/アナログ
 - **PortD/J5**: GPIO22, GPIO19 - UART/GPIO/WS2812用途
 
-### PortD/J5 UART設定（動作確認済み）
+### UART接続：複数ポート選択可能
+
+**選択肢1：本体Grove**
+```ruby
+UART_TX_PIN = 26  # 送信ピン
+UART_RX_PIN = 32  # 受信ピン
+```
+
+**選択肢2：PortD/J5**（動作確認済み）
 ```ruby
 UART_TX_PIN = 22  # 送信ピン
 UART_RX_PIN = 19  # 受信ピン
 ```
 
 **UART通信の接続原理**:
-- ATOM Matrix TX → MIDI Unit RX（クロスオーバー接続）
-- ATOM Matrix RX ← MIDI Unit TX
+- ATOM Matrix TX → 対象ユニットの RX（クロスオーバー接続）
+- ATOM Matrix RX ← 対象ユニットの TX
 - TX/RXを逆にすると通信不能
 
 **ピン識別方法**:
-1. 拡張ボードのシルクスクリーン印刷を確認
-2. 実際にTX/RXを入れ替えて動作確認
-3. ATOM Lite標準（GPIO22=TX, GPIO19=RX）から類推
+1. 拡張ボードのシルクスクリーン印刷を確認してどのコネクタに接続しているか判定
+2. 実際にTX/RXを入れ替えて動作確認（正解のペアが通信成功）
+3. ATOM Lite標準ピン配置から推測
 
 ## Auto-Referenced Information
 
@@ -340,14 +348,19 @@ M5Stack ATOM Matrix上でPicoRuby(mruby/c)を使用し、MIDI音源モジュー�
 - LED: WS2812 LEDストリップ 30個
 
 ### ピン配置
-- **PortD/J5 (UART)**: GPIO22(TX), GPIO19(RX) → MIDI Unit
-- **PortD/J5 (WS2812)**: GPIO32 → WS2812 LEDストリップ（本実装）
+
+**MIDI Unit接続：複数ポート選択可能**
+- **選択肢1：本体Grove** GPIO26(TX), GPIO32(RX)
+- **選択肢2：PortD/J5** GPIO22(TX), GPIO19(RX)
+
+**その他**
+- WS2812 LEDストリップ: GPIO32（または別ピン、接続先による）
 - ボタン: GPIO39（ATOM Matrix内蔵）
 
-**ポート識別方法**:
-- 公式資料なし：実物のシルクスクリーン印刷確認、または試行錯誤で識別
-- 動作確認済み：TX=22, RX=19 でMIDI通信成功
-- 参考：本体Grove (GPIO26=TX, GPIO32=RX) も使用可能
+**識別方法**:
+- MIDI Unitが物理的に接続されているコネクタで決定
+- 公式資料なし：拡張ボードのシルクスクリーン印刷確認、または試行錯誤で識別
+- UART通信の原理（クロスオーバー接続）に基づき、TX/RXを逆にするとエラー
 
 ## 機能仕様
 
@@ -410,9 +423,10 @@ M5Stack ATOM Matrix上でPicoRuby(mruby/c)を使用し、MIDI音源モジュー�
 ```ruby
 DEBUG = false  # true=デバッグ出力、false=出力なし
 
-MIDI_TX_PIN = 22      # MIDI送信ピン（PortD/J5）
-MIDI_RX_PIN = 19      # MIDI受信ピン（PortD/J5）
-# 注：本体Groveを使用する場合は TX=26, RX=32
+MIDI_TX_PIN = 22      # MIDI送信ピン（PortD/J5接続時）
+MIDI_RX_PIN = 19      # MIDI受信ピン（PortD/J5接続時）
+
+# 選択肢：本体Grove接続時は TX=26, RX=32
 DRUM_INTERVAL = 2     # ドラム発音間隔(ms)。小さくすると速く
 
 PATTERN = [  # 16ステップドラムパターン
