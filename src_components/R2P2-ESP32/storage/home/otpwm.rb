@@ -126,7 +126,7 @@ class NoiseInstrument
   I2C_SDA_PIN = 25
   I2C_SCL_PIN = 21
 
-  DIST_VALID_MIN = 20       # センサーが「信用できる」最小値(mm)
+  DIST_VALID_MIN = 25       # センサーが「信用できる」最小値(mm)
   DIST_VALID_MAX = 2000     # センサーが「信用できる」最大値(mm)
   FREQ_MIN = 400            # 最低周波数(Hz)。ノイズ的な低音（2オクターブアップ）
   FREQ_MAX = 8000           # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
@@ -270,11 +270,11 @@ class AmbientLEDVisualizer
 end
 
 speaker = if MUTE
-  DPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 1, mute: MUTE)
+  DPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 0, mute: MUTE)
 elsif NOISE_MODE
-  NoisyPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 500, duty: 30)
+  NoisyPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 500, duty: 0)
 else
-  SimplePWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 1)
+  SimplePWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 0)
 end
 
 button = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
