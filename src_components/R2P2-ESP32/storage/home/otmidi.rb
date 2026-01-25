@@ -6,8 +6,8 @@ require 'irq'
 require 'uart'
 
 class DrumMachine
-  MIDI_TX_PIN = 26
-  MIDI_RX_PIN = 32
+  MIDI_TX_PIN = 22
+  MIDI_RX_PIN = 19
   DRUM_INTERVAL = 2     # ドラム発音間隔(ms)。小さくすると速く
   
   KICK = 36
@@ -61,7 +61,7 @@ class DrumMachine
 end
 
 class RhythmLEDVisualizer
-  LED_PIN = 22
+  LED_PIN = 32
   LED_COUNT = 30
   
   HUES_DRUM = [nil, 0, 128, 192, 64, 0]
