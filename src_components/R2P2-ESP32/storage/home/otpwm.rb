@@ -126,7 +126,7 @@ class NoiseInstrument
   I2C_SDA_PIN = 25
   I2C_SCL_PIN = 21
 
-  DIST_VALID_MIN = 100      # センサーが「信用できる」最小値(mm)
+  DIST_VALID_MIN = 20       # センサーが「信用できる」最小値(mm)
   DIST_VALID_MAX = 2000     # センサーが「信用できる」最大値(mm)
   FREQ_MIN = 400            # 最低周波数(Hz)。ノイズ的な低音（2オクターブアップ）
   FREQ_MAX = 8000           # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
