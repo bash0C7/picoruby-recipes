@@ -23,7 +23,7 @@ require 'pwm'
 require 'i2c'
 require 'mpu6886'
 require 'vl53l0x'
-require 'iir_filter'
+# require 'iir_filter'  # IIRFilter無効化（速度制限で代替）
 
 class NoiseInstrument
   SPEAKER_PIN = 33
@@ -31,7 +31,7 @@ class NoiseInstrument
   I2C_SCL_PIN = 21
   
   DIST_MIN = 20         # 最小距離(mm)。近づくと低い音
-  DIST_MAX = 250        # 最大距離(mm)。遠ざかると高い音
+  DIST_MAX = 2000       # 最大距離(mm)。遠ざかると高い音
   FREQ_MIN = 100        # 最低周波数(Hz)。ノイズ的な低音
   FREQ_MAX = 2000       # 最高周波数(Hz)。攻撃的な高音
   
@@ -44,14 +44,15 @@ class NoiseInstrument
   CUTOFF_SCALE = 30                     # Z軸→カットオフ風効果(duty微調整)
   
   DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
-  
+  MAX_FREQ_CHANGE_PER_MS = 100          # 周波数変化速度制限(Hz/ms)。素早いグリッサンド
+
   attr_reader :current_freq, :current_duty
   
   def initialize(speaker, tof_sensor, accel_sensor)
     @speaker = speaker
     @tof_sensor = tof_sensor
     @accel_sensor = accel_sensor
-    @distance_filter = IIRFilter.new
+    # @distance_filter = IIRFilter.new  # IIRFilter無効化
     
     @current_freq = FREQ_MIN
     @current_duty = 1
@@ -62,19 +63,34 @@ class NoiseInstrument
   end
   
   def update_distance
-    distance = @distance_filter.filter(@tof_sensor.read_distance)
-    
-    if distance > 0 && distance >= DIST_MIN && distance <= DIST_MAX
-      base_freq = FREQ_MIN + (distance - DIST_MIN) * @freq_range / @dist_range
-      @current_freq = base_freq.clamp(FREQ_MIN, FREQ_MAX)
+    distance = @tof_sensor.read_distance  # 生の距離値を使用
+
+    # 範囲判定とターゲット周波数計算
+    if distance < DIST_MIN
+      target_freq = FREQ_MIN
+      @target_duty = BASE_DUTY
+    elsif distance >= DIST_MIN && distance <= DIST_MAX
+      target_freq = FREQ_MIN + (distance - DIST_MIN) * @freq_range / @dist_range
       @target_duty = BASE_DUTY
     else
+      # 2000mm超は現在周波数維持、消音
+      target_freq = @current_freq
       @target_duty = 1
     end
-    
+
+    # 速度制限（グリッサンド効果）
+    freq_diff = target_freq - @current_freq
+    if freq_diff > MAX_FREQ_CHANGE_PER_MS
+      @current_freq += MAX_FREQ_CHANGE_PER_MS
+    elsif freq_diff < -MAX_FREQ_CHANGE_PER_MS
+      @current_freq -= MAX_FREQ_CHANGE_PER_MS
+    else
+      @current_freq = target_freq
+    end
+
     @speaker.frequency(@current_freq)
-    
-    puts "D #{distance}, F #{@current_freq}" if DEBUG
+
+    puts "D #{distance}, TF #{target_freq}, CF #{@current_freq}" if DEBUG
   end
   
   def update_accel
