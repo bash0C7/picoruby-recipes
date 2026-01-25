@@ -56,9 +56,9 @@ class NoisyPWM
 
   def duty(d)
     @base_duty = d
-    # デューティ比をほぼ完全にランダムに（0-100%の全範囲）
-    # これにより周波数に依存せずホワイトノイズ効果を実現
-    random_duty = @random.rand(101)  # 0-100
+    # dutyを20-80%の範囲でランダムに（音が途切れないように）
+    # これによりホワイトノイズ効果を実現しつつ、常に音が鳴る
+    random_duty = 20 + @random.rand(61)  # 20-80
     @pwm.duty(random_duty)
   end
 end
@@ -100,11 +100,13 @@ class NoiseInstrument
     @tof_sensor = tof_sensor
     @accel_sensor = accel_sensor
     # @distance_filter = IIRFilter.new  # IIRFilter無効化
-    
+
     @current_freq = FREQ_MIN
     @current_duty = 1
     @target_duty = 1
     @distance = DIST_MIN
+    @prev_set_freq = nil  # 前回設定した周波数
+    @prev_set_duty = nil  # 前回設定したduty
 
     @freq_range = FREQ_MAX - FREQ_MIN
     @dist_range = DIST_MAX - DIST_MIN
@@ -137,30 +139,41 @@ class NoiseInstrument
       @current_freq = target_freq
     end
 
-    @speaker.frequency(@current_freq)
+    if @prev_set_freq != @current_freq
+      @speaker.frequency(@current_freq)
+      @prev_set_freq = @current_freq
+    end
 
     puts "D #{distance}, TF #{target_freq}, CF #{@current_freq}" if DEBUG
   end
   
   def update_accel
     accel_data = @accel_sensor.acceleration
-    
+
     vibrato = (accel_data[:y] * VIBRATO_SCALE).to_i
-    @speaker.frequency((@current_freq + vibrato).clamp(FREQ_MIN, FREQ_MAX))
-    
+    new_freq = (@current_freq + vibrato).clamp(FREQ_MIN, FREQ_MAX)
+
+    if @prev_set_freq != new_freq
+      @speaker.frequency(new_freq)
+      @prev_set_freq = new_freq
+    end
+
     duty_delta = (accel_data[:x] * DUTY_DELTA_SCALE).to_i
     cutoff_effect = (accel_data[:z] * CUTOFF_SCALE).to_i
     target_with_effects = (@target_duty + duty_delta + cutoff_effect).clamp(DUTY_MIN, DUTY_MAX)
-    
+
     if @target_duty == 1
       target_with_effects = 1
     end
-    
+
     @current_duty += (target_with_effects - @current_duty) / DUTY_SMOOTH_FACTOR
     @current_duty = @current_duty.clamp(1, DUTY_MAX)
-    
-    @speaker.duty(@current_duty)
-    
+
+    if @prev_set_duty != @current_duty
+      @speaker.duty(@current_duty)
+      @prev_set_duty = @current_duty
+    end
+
     return accel_data
   end
 end
@@ -243,7 +256,7 @@ loop do
                  accel_data[:x], accel_data[:y], accel_data[:z])
   led_viz.show
 
-  sleep_ms(1)
+  #sleep_ms(1)
 end
 
 irq.unregister
