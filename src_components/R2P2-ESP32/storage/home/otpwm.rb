@@ -43,7 +43,7 @@ class NoiseInstrument
   VIBRATO_SCALE = 50                    # Y軸→ビブラート強さ(Hz)
   CUTOFF_SCALE = 30                     # Z軸→カットオフ風効果(duty微調整)
   
-  DUTY_SMOOTH_FACTOR = 3                # duty変化の滑らかさ
+  DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
   
   attr_reader :current_freq, :current_duty
   
@@ -162,21 +162,16 @@ irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {viz: led_viz}) do |bt
   cap[:viz].flash
 end
 
-tick_count = 0
-
 loop do
   IRQ.process
-  tick_count += 1
-  
+
   instrument.update_distance
-  
-  if tick_count % 2 == 0
-    accel_data = instrument.update_accel
-    led_viz.update(instrument.current_freq, instrument.current_duty, 
-                   accel_data[:x], accel_data[:y], accel_data[:z])
-    led_viz.show
-  end
-  
+  accel_data = instrument.update_accel
+
+  led_viz.update(instrument.current_freq, instrument.current_duty,
+                 accel_data[:x], accel_data[:y], accel_data[:z])
+  led_viz.show
+
   sleep_ms(1)
 end
 
