@@ -1,5 +1,6 @@
 DEBUG = true  # デバッグモード。true=デバッグ出力、false=デバッグ出力なし
 MUTE = false   # PWM消音モード。true=音を出さず数字を表示 false=実際に音を出す
+NOISE_MODE = true  # ノイズ音モード。true=ノイズ音、false=通常BEEP音
 
 class DPWM
   def initialize(pin, param = {})
@@ -13,6 +14,52 @@ class DPWM
 
   def duty(d)
     puts "duty #{d}" if @mute
+  end
+end
+
+class SimpleRandom
+  # 線形合同法（LCG）による擬似乱数生成
+  # next = (a * seed + c) % m
+  # パラメータ: a=1103515245, c=12345, m=2^31
+
+  def initialize(seed = 12345)
+    @seed = seed
+  end
+
+  def next_int
+    @seed = (@seed * 1103515245 + 12345) & 0x7FFFFFFF
+    @seed
+  end
+
+  def rand(max)
+    (self.next_int % max)
+  end
+end
+
+class NoisyPWM
+  # ホワイトノイズ実装：周波数は基本周波数にほぼ固定、デューティ比を0-100%の全範囲でランダムに変動
+  FREQ_STABLE_RANGE = 5  # 周波数微調整(Hz)。基本周波数を維持
+
+  def initialize(pin, param = {})
+    @pwm = PWM.new(pin, param)
+    @random = SimpleRandom.new
+    @base_freq = param[:frequency] || 100
+    @base_duty = param[:duty] || 1
+  end
+
+  def frequency(f)
+    @base_freq = f
+    # 周波数は基本周波数にほぼ固定（微調整のみ）
+    noise = @random.rand(FREQ_STABLE_RANGE) - (FREQ_STABLE_RANGE / 2)
+    @pwm.frequency((f + noise).clamp(400, 8000))
+  end
+
+  def duty(d)
+    @base_duty = d
+    # デューティ比をほぼ完全にランダムに（0-100%の全範囲）
+    # これにより周波数に依存せずホワイトノイズ効果を実現
+    random_duty = @random.rand(101)  # 0-100
+    @pwm.duty(random_duty)
   end
 end
 
@@ -32,8 +79,8 @@ class NoiseInstrument
   
   DIST_MIN = 20         # 最小距離(mm)。近づくと低い音
   DIST_MAX = 2000       # 最大距離(mm)。遠ざかると高い音
-  FREQ_MIN = 100        # 最低周波数(Hz)。ノイズ的な低音
-  FREQ_MAX = 2000       # 最高周波数(Hz)。攻撃的な高音
+  FREQ_MIN = 400        # 最低周波数(Hz)。ノイズ的な低音（2オクターブアップ）
+  FREQ_MAX = 8000       # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
   
   BASE_DUTY = 40           # 基準duty比(%)
   DUTY_MIN = 25            # 最小duty比(%)
@@ -46,7 +93,7 @@ class NoiseInstrument
   DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
   MAX_FREQ_CHANGE_PER_MS = 100          # 周波数変化速度制限(Hz/ms)。素早いグリッサンド
 
-  attr_reader :current_freq, :current_duty
+  attr_reader :current_freq, :current_duty, :distance
   
   def initialize(speaker, tof_sensor, accel_sensor)
     @speaker = speaker
@@ -57,13 +104,15 @@ class NoiseInstrument
     @current_freq = FREQ_MIN
     @current_duty = 1
     @target_duty = 1
-    
+    @distance = DIST_MIN
+
     @freq_range = FREQ_MAX - FREQ_MIN
     @dist_range = DIST_MAX - DIST_MIN
   end
   
   def update_distance
-    distance = @tof_sensor.read_distance  # 生の距離値を使用
+    @distance = @tof_sensor.read_distance  # 生の距離値を保存
+    distance = @distance
 
     # 範囲判定とターゲット周波数計算
     if distance < DIST_MIN
@@ -126,15 +175,19 @@ class AmbientLEDVisualizer
     @wave_offset = 0
   end
   
-  def update(freq, duty, accel_x, accel_y, accel_z)
-    @wave_offset = (@wave_offset + 1) % 384
-    
-    hue_base = ((freq - NoiseInstrument::FREQ_MIN) * 384 / NoiseInstrument::FREQ_MAX).clamp(0, 384)
+  def update(freq, duty, distance, accel_x, accel_y, accel_z)
+    # 距離に基づいてLED波形オフセットを大きく変動
+    distance_offset = (distance * 2) % 384  # distanceでオフセットが大きく変化
+    @wave_offset = (distance_offset + (@wave_offset + 1)) % 384
+
+    # 距離に基づいて色相ベースも変動
+    distance_hue_shift = (distance / 10) % 384  # 距離で色相をシフト
+    hue_base = ((freq - NoiseInstrument::FREQ_MIN) * 384 / NoiseInstrument::FREQ_MAX + distance_hue_shift).clamp(0, 767) % 384
     saturation = ((duty - 1) * 255 / NoiseInstrument::DUTY_MAX).clamp(50, 255)
     brightness = ((duty - 1) * 100 / NoiseInstrument::DUTY_MAX).clamp(10, 100)
-    
+
     accel_influence = ((accel_x + accel_y + accel_z) * 50).to_i
-    
+
     LED_COUNT.times do |i|
       hue = (hue_base + @wave_offset + i * 10 + accel_influence) % 384
       sb = (saturation << 8) | brightness
@@ -153,6 +206,8 @@ end
 
 speaker = if MUTE
   DPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 1, mute: MUTE)
+elsif NOISE_MODE
+  NoisyPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 500, duty: 30)
 else
   PWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 1)
 end
@@ -184,7 +239,7 @@ loop do
   instrument.update_distance
   accel_data = instrument.update_accel
 
-  led_viz.update(instrument.current_freq, instrument.current_duty,
+  led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance,
                  accel_data[:x], accel_data[:y], accel_data[:z])
   led_viz.show
 
