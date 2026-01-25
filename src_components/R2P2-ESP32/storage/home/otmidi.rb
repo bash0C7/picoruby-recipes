@@ -50,6 +50,10 @@ class DrumMachine
   def group_history
     @group_history
   end
+
+  def step
+    @step
+  end
   
   def crash
     @uart.write((0x99).chr + CRASH.chr + (0x7F).chr)
@@ -67,28 +71,40 @@ class RhythmLEDVisualizer
     @led_colors = Array.new(LED_COUNT, 0)
   end
   
-  def update(group_history)
+  def update(group_history, step)
+    # ステップに基づいてオフセットを計算（毎拍ひとつずつシフト）
+    pattern_offset = step % 3
+
     saturation = 255
     brightness = 80
     sb = (saturation << 8) | brightness
-    
+
+    # LED を一度クリアして新たに描画
+    LED_COUNT.times { |i| @led_colors[i] = 0 }
+
     group_history.each do |g|
       h = HUES_DRUM[g] << 16 | sb
       case g
       when 1
         10.times { |s|
-          @led_colors[(s * 3) % LED_COUNT] = h
+          idx = (s * 3 + pattern_offset) % LED_COUNT
+          @led_colors[idx] = h
         }
       when 2
         10.times { |s|
-          @led_colors[(s * 3 + 1) % LED_COUNT] = h
+          idx = (s * 3 + pattern_offset + 1) % LED_COUNT
+          @led_colors[idx] = h
         }
       when 3
         10.times { |s|
-          @led_colors[(s * 3 + 2) % LED_COUNT] = h
+          idx = (s * 3 + pattern_offset + 2) % LED_COUNT
+          @led_colors[idx] = h
         }
       when 4
-        6.times { |i| @led_colors[(i * 5) % LED_COUNT] = h }
+        6.times { |i|
+          idx = (i * 5 + pattern_offset) % LED_COUNT
+          @led_colors[idx] = h
+        }
       end
     end
   end
@@ -131,10 +147,10 @@ loop do
   if tick_count % DrumMachine::DRUM_INTERVAL == 0
     drum.update
   end
-  
-  led_viz.update(drum.group_history)
+
+  led_viz.update(drum.group_history, drum.step)
   led_viz.show
-  sleep_ms(1)
+  sleep_ms(50)
 end
 
 irq.unregister
