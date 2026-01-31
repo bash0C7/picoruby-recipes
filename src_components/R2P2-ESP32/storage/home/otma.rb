@@ -307,6 +307,11 @@ loop do
   # 外部MIDI受信（毎フレーム）
   drum.process_external_midi
 
+  # クラッシュシンバルは即座にフラッシュ（毎フレーム確認）
+  if drum.has_crash?
+    led_viz.flash
+  end
+
   # LED更新
   if tick_count % DrumMachine::DRUM_INTERVAL == 0
     led_viz.update(
@@ -315,7 +320,7 @@ loop do
       drum.step,
       drum.fill_in_mode?,
       drum.external_group_history_count,
-      drum.has_crash?
+      false  # クラッシュ処理済みなので常にfalse
     )
     led_viz.show
   end
