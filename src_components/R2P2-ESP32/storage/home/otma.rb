@@ -64,16 +64,23 @@ class DrumMachine
     @current_pattern = BASIC_PATTERN  # 現在のパターン
     @midi_buffer = []            # 外部MIDI受信バッファ
     @external_group_history = [4, 4, 4]  # 外部MIDIグループ履歴
+    @has_crash = false           # クラッシュシンバル検出フラグ
   end
   
   def update
     notes = @current_pattern[@step % @current_pattern.size]
+    @has_crash = false           # 毎フレームリセット
 
     # 複数の音を鳴らす
     last_note = nil
     notes.each do |note|
       @uart.write((0x99).chr + note.chr + (0x60).chr)
       last_note = note
+
+      # クラッシュシンバル検出
+      if note == CRASH
+        @has_crash = true
+      end
     end
 
     # グループ履歴更新（最後の音のグループを記録）
@@ -120,6 +127,18 @@ class DrumMachine
     @uart.write((0x99).chr + CRASH.chr + (0x7F).chr)
   end
 
+  def has_crash?
+    @has_crash
+  end
+
+  def fill_in_mode?
+    @fill_in_mode
+  end
+
+  def external_group_history_count
+    @external_group_history.uniq.size
+  end
+
   def process_external_midi
     # UART受信バッファを全て読む
     while @uart.bytes_available > 0
@@ -147,6 +166,11 @@ class DrumMachine
 
             # ソフトスルー: そのまま送り返す
             @uart.write(status.chr + note.chr + velocity.chr)
+
+            # クラッシュシンバル検出
+            if note == CRASH && velocity > 0
+              @has_crash = true
+            end
 
             # グループ履歴更新（velocity > 0のみ）
             if velocity > 0
@@ -185,27 +209,58 @@ class RhythmLEDVisualizer
     @led_colors = Array.new(LED_COUNT, 0)
   end
   
-  def update(auto_group_history, external_group_history, step)
+  def update(auto_group_history, external_group_history, step, is_fill_in, external_diversity, has_crash)
+    # クラッシュシンバル検出時は即座にフラッシュ
+    if has_crash
+      flash
+      return
+    end
+
     # 2つのグループ履歴を統合（交互に配置）
     combined_history = []
     [auto_group_history, external_group_history].each do |history|
       history.each { |g| combined_history.push(g) }
     end
 
-    # ステップに基づいてオフセットを計算（毎拍ひとつずつシフト）
     pattern_offset = step % LED_COUNT
 
-    saturation = 255
-    brightness = 80
-    sb = (saturation << 8) | brightness
+    # 時間的変化（stepで色相回転）
+    time_hue_shift = (step * 3) % 384
 
-    # 全 LED に対して combined_history の色を循環させる
+    # 基本彩度・輝度設定
+    if is_fill_in
+      # フィルイン中は最大化
+      base_saturation = 255
+      base_brightness = 120
+    else
+      # 通常時
+      base_saturation = 200
+      base_brightness = 60
+    end
+
+    # 外部MIDI多様性で彩度を動的制御（0-3 → 0-55の加算）
+    saturation_boost = external_diversity * 18
+
     LED_COUNT.times do |i|
-      # 各 LED にオフセット付きで combined_history から色を選ぶ
       color_idx = (i + pattern_offset) % combined_history.size
       g = combined_history[color_idx]
-      hue = HUES_DRUM[g]
+      base_hue = HUES_DRUM[g]
 
+      # 色相変調（3要素を重ねる）
+      # 1. ベース色（グループ）
+      # 2. 時間変化（step）
+      # 3. 位置オフセット（LED位置i）
+      hue = (base_hue + time_hue_shift + i * 10) % 384
+
+      # 彩度変調（外部MIDI多様性を反映）
+      saturation = (base_saturation + saturation_boost).clamp(0, 255)
+
+      # 輝度グラデーション（中央明るく、端暗く）
+      distance_from_center = ((i - LED_COUNT / 2).abs * 2)
+      brightness_offset = (100 - distance_from_center).clamp(0, 100)
+      brightness = ((base_brightness + brightness_offset) / 2).clamp(30, 120)
+
+      sb = (saturation << 8) | brightness
       @led_colors[i] = (hue << 16) | sb
     end
   end
@@ -254,7 +309,14 @@ loop do
 
   # LED更新
   if tick_count % DrumMachine::DRUM_INTERVAL == 0
-    led_viz.update(drum.group_history, drum.external_group_history, drum.step)
+    led_viz.update(
+      drum.group_history,
+      drum.external_group_history,
+      drum.step,
+      drum.fill_in_mode?,
+      drum.external_group_history_count,
+      drum.has_crash?
+    )
     led_viz.show
   end
 
