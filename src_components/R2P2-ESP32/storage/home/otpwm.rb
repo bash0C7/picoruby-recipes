@@ -232,7 +232,7 @@ end
 
 class AmbientLEDVisualizer
   LED_PIN = 22
-  LED_COUNT = 30
+  LED_COUNT = 29
   
   def initialize(led_strip)
     @led_strip = led_strip
@@ -298,15 +298,30 @@ irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {viz: led_viz}) do |bt
   cap[:viz].flash
 end
 
+accel_data = {x: 0, y: 0, z: 0}
+loop_counter = 0
+
 loop do
   IRQ.process
 
+  # 毎ループ: distance取得して音を鳴らす
   instrument.update_distance
-  accel_data = instrument.update_accel
 
+  # 2ループに1度: accel更新
+  if loop_counter % 2 == 0
+    accel_data = instrument.update_accel
+  end
+
+  # 毎ループ: LED色計算
   led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance,
                  accel_data[:x], accel_data[:y], accel_data[:z])
-  led_viz.show
+
+  # 2ループに1度: LED表示
+  if loop_counter % 2 == 0
+    led_viz.show
+  end
+
+  loop_counter += 1
 
   #sleep_ms(1)
 end
