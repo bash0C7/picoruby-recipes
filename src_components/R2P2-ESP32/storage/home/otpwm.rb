@@ -194,9 +194,7 @@ class NoiseInstrument
     puts "D #{raw_distance}, SD #{@distance}, CF #{@current_freq}" if DEBUG
   end
   
-  def update_accel
-    accel_data = @accel_sensor.acceleration
-
+  def update_accel(accel_data)
     vibrato = (accel_data[:y] * VIBRATO_SCALE).to_i
     new_freq = (@current_freq + vibrato).clamp(FREQ_MIN, FREQ_MAX)
 
@@ -220,8 +218,6 @@ class NoiseInstrument
       @speaker.duty(@current_duty)
       @prev_set_duty = @current_duty
     end
-
-    return accel_data
   end
 end
 
@@ -302,8 +298,15 @@ loop do
   # 毎ループ: distance取得して音を鳴らす
   instrument.update_distance
 
+  # 5フレームごとに加速度を取得（重い処理）
+  if loop_counter % 5 == 0
+    accel_data = @accel_sensor.acceleration
+  end
+
+  # 毎フレーム duty を更新（古い accel_data でもいい）
+  instrument.update_accel(accel_data)
+
   if loop_counter % 2 == 0
-    accel_data = instrument.update_accel
     led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance,
                  accel_data[:x], accel_data[:y], accel_data[:z])
     led_viz.show
