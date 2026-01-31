@@ -125,10 +125,10 @@ class NoiseInstrument
   I2C_SDA_PIN = 25
   I2C_SCL_PIN = 21
 
-  DIST_VALID_MIN = 25       # センサーが「信用できる」最小値(mm)
+  DIST_VALID_MIN = 20       # センサーが「信用できる」最小値(mm)
   DIST_VALID_MAX = 300     # センサーが「信用できる」最大値(mm)
-  FREQ_MIN = 400            # 最低周波数(Hz)。ノイズ的な低音（2オクターブアップ）
-  FREQ_MAX = 2500           # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
+  FREQ_MIN = 200            # 最低周波数(Hz)。
+  FREQ_MAX = 1000           # 最高周波数(Hz)。
 
   BASE_DUTY = 40           # 基準duty比(%)
   DUTY_MIN = 25            # 最小duty比(%)
@@ -235,21 +235,19 @@ class AmbientLEDVisualizer
     distance_offset = (distance * 2) % 384  # distanceでオフセットが大きく変化
     @wave_offset = (distance_offset + (@wave_offset + 1)) % 384
 
-    # 距離に基づいて色相ベースも変動
-    distance_hue_shift = (distance / 10) % 384  # 距離で色相をシフト
-    hue_base = ((freq - NoiseInstrument::FREQ_MIN) * 384 / NoiseInstrument::FREQ_MAX + distance_hue_shift).clamp(0, 767) % 384
+    # 色相：距離のみで決定（DIST_VALID_MIN～DIST_VALID_MAX → 0～384）
+    hue_base = ((distance - NoiseInstrument::DIST_VALID_MIN) * 384 / (NoiseInstrument::DIST_VALID_MAX - NoiseInstrument::DIST_VALID_MIN)).to_i
 
-    # 彩度：duty係数アップ + frequency彩度 + 最小値を上げる（合わせ技）
-    duty_sat = ((duty - 1) * 255 / (NoiseInstrument::DUTY_MAX - 1)).clamp(0, 255)
-    freq_sat = ((freq - NoiseInstrument::FREQ_MIN) * 255 / NoiseInstrument::FREQ_MAX).clamp(0, 255)
-    saturation = ((duty_sat + freq_sat) / 2).clamp(180, 255)
+    # 彩度：加速度（X軸、Y軸）で決定、静止時でも30%を保持
+    accel_xy = ((accel_x.abs + accel_y.abs) * 112).to_i  # 最大225を加算
+    saturation = (30 + accel_xy).clamp(30, 255)
 
-    brightness = ((duty - 1) * 75 / NoiseInstrument::DUTY_MAX).clamp(10, 75)
-
-    accel_influence = ((accel_x + accel_y + accel_z) * 50).to_i
+    # 輝度：加速度（Z軸）で決定、静止時でも30%を保持
+    accel_z_effect = (accel_z.abs * 30).to_i  # 最大30を加算
+    brightness = (30 + accel_z_effect).clamp(30, 60)
 
     LED_COUNT.times do |i|
-      hue = (hue_base + @wave_offset + i * 10 + accel_influence) % 384
+      hue = (hue_base + @wave_offset + i * 10) % 384
       sb = (saturation << 8) | brightness
       @led_colors[i] = (hue << 16) | sb
     end
