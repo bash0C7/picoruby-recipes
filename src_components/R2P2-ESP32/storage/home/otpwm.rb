@@ -1,6 +1,6 @@
 DEBUG = true  # デバッグモード。true=デバッグ出力、false=デバッグ出力なし
 MUTE = false   # PWM消音モード。true=音を出さず数字を表示 false=実際に音を出す
-NOISE_MODE = true  # ノイズ音モード。true=ノイズ音、false=通常BEEP音
+NOISE_MODE = false  # ノイズ音モード。true=ノイズ音、false=通常BEEP音
 
 module Speaker
   def frequency(f)
@@ -144,10 +144,9 @@ class NoiseInstrument
 
   attr_reader :current_freq, :current_duty, :distance
 
-  def initialize(speaker, tof_sensor, accel_sensor)
+  def initialize(speaker, tof_sensor)
     @speaker = speaker
     @tof_sensor = tof_sensor
-    @accel_sensor = accel_sensor
 
     @current_freq = FREQ_MIN
     @current_duty = 1
@@ -222,7 +221,7 @@ class NoiseInstrument
 end
 
 class AmbientLEDVisualizer
-  LED_PIN = 22
+  LED_PIN = 26
   LED_COUNT = 29
   
   def initialize(led_strip)
@@ -239,7 +238,12 @@ class AmbientLEDVisualizer
     # 距離に基づいて色相ベースも変動
     distance_hue_shift = (distance / 10) % 384  # 距離で色相をシフト
     hue_base = ((freq - NoiseInstrument::FREQ_MIN) * 384 / NoiseInstrument::FREQ_MAX + distance_hue_shift).clamp(0, 767) % 384
-    saturation = ((duty - 1) * 255 / NoiseInstrument::DUTY_MAX).clamp(50, 255)
+
+    # 彩度：duty係数アップ + frequency彩度 + 最小値を上げる（合わせ技）
+    duty_sat = ((duty - 1) * 255 / (NoiseInstrument::DUTY_MAX - 1)).clamp(0, 255)
+    freq_sat = ((freq - NoiseInstrument::FREQ_MIN) * 255 / NoiseInstrument::FREQ_MAX).clamp(0, 255)
+    saturation = ((duty_sat + freq_sat) / 2).clamp(180, 255)
+
     brightness = ((duty - 1) * 100 / NoiseInstrument::DUTY_MAX).clamp(10, 100)
 
     accel_influence = ((accel_x + accel_y + accel_z) * 50).to_i
@@ -282,7 +286,7 @@ sleep_ms(100)
 tof_sensor = VL53L0X.new(i2c_bus)
 sleep_ms(100)
 
-instrument = NoiseInstrument.new(speaker, tof_sensor, accel_sensor)
+instrument = NoiseInstrument.new(speaker, tof_sensor)
 led_viz = AmbientLEDVisualizer.new(led_strip)
 
 irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {viz: led_viz}) do |btn, ev, cap|
@@ -300,7 +304,7 @@ loop do
 
   # 5フレームごとに加速度を取得（重い処理）
   if loop_counter % 5 == 0
-    accel_data = @accel_sensor.acceleration
+    accel_data = accel_sensor.acceleration
   end
 
   # 毎フレーム duty を更新（古い accel_data でもいい）
