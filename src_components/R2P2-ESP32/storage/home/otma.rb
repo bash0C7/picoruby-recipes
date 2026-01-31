@@ -200,7 +200,7 @@ end
 
 class RhythmLEDVisualizer
   LED_PIN = 33
-  LED_COUNT = 30
+  LED_COUNT = 60
   
   HUES_DRUM = [nil, 0, 128, 192, 64, 0]
   
@@ -313,7 +313,7 @@ loop do
   end
 
   # LED更新
-  if tick_count % DrumMachine::DRUM_INTERVAL == 0
+  if tick_count % 5 == 0
     led_viz.update(
       drum.group_history,
       drum.external_group_history,
