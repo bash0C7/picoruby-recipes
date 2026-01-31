@@ -19,7 +19,6 @@ class FingerDrum
 
   def initialize(uart)
     @uart = uart
-    @button_states = {39 => false, 26 => false, 32 => false}
   end
 
   def play_note(pin)
@@ -27,67 +26,43 @@ class FingerDrum
     @uart.write((0x99).chr + note.chr + (0x7F).chr)
     puts "Button #{pin} pressed → Note #{note}" if DEBUG
   end
-
-  def press(pin)
-    @button_states[pin] = true
-  end
-
-  def release(pin)
-    @button_states[pin] = false
-  end
-
-  def button_states
-    @button_states
-  end
 end
 
 class MatrixLED
   LED_PIN = 27
   LED_COUNT = 25
 
-  # ボタン → RGB色マッピング（1/3輝度で発熱防止）
-  BUTTON_COLORS = {
-    39 => {r: 85, g: 85, b: 0},    # CRASH → 黄色
-    26 => {r: 85, g: 0, b: 0},     # KICK → 赤
-    32 => {r: 0, g: 85, b: 85}     # SNARE → シアン
+  # ボタン → RGB色マッピング（フラッシュ時の最大輝度版）
+  FLASH_COLORS = {
+    39 => {r: 255, g: 255, b: 0},    # CRASH → 鮮やかな黄色
+    26 => {r: 255, g: 0, b: 0},      # KICK → 鮮やかな赤
+    32 => {r: 0, g: 255, b: 255}     # SNARE → 鮮やかなシアン
   }
+
+  # アイドル時のグレー色（電源ON表示）
+  IDLE_R = 5
+  IDLE_G = 5
+  IDLE_B = 5
 
   def initialize(led_strip)
     @led_strip = led_strip
-    @led_colors = Array.new(LED_COUNT, [0, 0, 0])
+    @led_colors = Array.new(LED_COUNT, [IDLE_R, IDLE_G, IDLE_B])
   end
 
-  def update(button_states)
-    # RGB加算合成
-    r_sum = 0
-    g_sum = 0
-    b_sum = 0
-
-    button_states.each do |pin, pressed|
-      if pressed
-        color = BUTTON_COLORS[pin]
-        r_sum += color[:r]
-        g_sum += color[:g]
-        b_sum += color[:b]
-      end
-    end
-
-    # 255でクランプ
-    final_r = r_sum.clamp(0, 255)
-    final_g = g_sum.clamp(0, 255)
-    final_b = b_sum.clamp(0, 255)
-
-    # 全LEDを同一色に設定
+  def flash(pin)
+    # 押下瞬間のフラッシュ（最大輝度・明度）
+    color = FLASH_COLORS[pin]
     LED_COUNT.times do |i|
-      @led_colors[i] = [final_r, final_g, final_b]
+      @led_colors[i] = [color[:r], color[:g], color[:b]]
     end
-
-    if DEBUG
-      puts "LED: R#{final_r} G#{final_g} B#{final_b}"
-    end
+    @led_strip.show_rgb(*@led_colors)
   end
 
-  def show
+  def show_idle
+    # アイドル状態（うっすらグレー）
+    LED_COUNT.times do |i|
+      @led_colors[i] = [IDLE_R, IDLE_G, IDLE_B]
+    end
     @led_strip.show_rgb(*@led_colors)
   end
 end
@@ -116,48 +91,32 @@ button_26 = GPIO.new(26, GPIO::IN|GPIO::PULL_UP)
 button_32 = GPIO.new(32, GPIO::IN|GPIO::PULL_UP)
 
 # GPIO39 IRQ登録（クラッシュシンバル）
-irq_39 = button_39.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 100,
-                       capture: {drum: drum, pin: 39}) do |btn, ev, cap|
-  case ev
-  when GPIO::EDGE_FALL  # 押下
-    cap[:drum].play_note(cap[:pin])
-    cap[:drum].press(cap[:pin])
-  when GPIO::EDGE_RISE  # リリース
-    cap[:drum].release(cap[:pin])
-  end
+irq_39 = button_39.irq(GPIO::EDGE_FALL, debounce: 5,
+                       capture: {drum: drum, led: led, pin: 39}) do |btn, ev, cap|
+  cap[:drum].play_note(cap[:pin])
+  cap[:led].flash(cap[:pin])
 end
 
 # GPIO26 IRQ登録（バスドラム）
-irq_26 = button_26.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 100,
-                       capture: {drum: drum, pin: 26}) do |btn, ev, cap|
-  case ev
-  when GPIO::EDGE_FALL
-    cap[:drum].play_note(cap[:pin])
-    cap[:drum].press(cap[:pin])
-  when GPIO::EDGE_RISE
-    cap[:drum].release(cap[:pin])
-  end
+irq_26 = button_26.irq(GPIO::EDGE_FALL, debounce: 5,
+                       capture: {drum: drum, led: led, pin: 26}) do |btn, ev, cap|
+  cap[:drum].play_note(cap[:pin])
+  cap[:led].flash(cap[:pin])
 end
 
 # GPIO32 IRQ登録（スネア）
-irq_32 = button_32.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 100,
-                       capture: {drum: drum, pin: 32}) do |btn, ev, cap|
-  case ev
-  when GPIO::EDGE_FALL
-    cap[:drum].play_note(cap[:pin])
-    cap[:drum].press(cap[:pin])
-  when GPIO::EDGE_RISE
-    cap[:drum].release(cap[:pin])
-  end
+irq_32 = button_32.irq(GPIO::EDGE_FALL, debounce: 5,
+                       capture: {drum: drum, led: led, pin: 32}) do |btn, ev, cap|
+  cap[:drum].play_note(cap[:pin])
+  cap[:led].flash(cap[:pin])
 end
 
 # メインループ
 loop do
   IRQ.process
 
-  # LED更新（ボタン状態に基づく）
-  led.update(drum.button_states)
-  led.show
+  # LED常時アイドル表示（うっすらグレー）
+  led.show_idle
 
   sleep_ms(1)
 end
