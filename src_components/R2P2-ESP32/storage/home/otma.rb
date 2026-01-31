@@ -41,12 +41,16 @@ class DrumMachine
     [HI_HAT_CLOSE, LOW_TOM]    # 15: 8拍裏
   ]
 
-  # フィルインパターン（完全版。全ドラム音使用）
+  # フィルインパターン（4拍。ドラムロール→CRASHで締める派手なフィル）
   FILL_IN_PATTERN = [
-    [KICK],      [HIGH_TOM],   [SNARE],     [MID_TOM],
-    [KICK],      [HIGH_TOM],   [SNARE],     [LOW_TOM],
-    [KICK],      [CRASH],      [SNARE],     [CRASH],
-    [KICK],      [HIGH_TOM],   [SNARE],     [CRASH]
+    [KICK],                     # 0: フィルイン開始
+    [SNARE, HIGH_TOM],          # 1: ドラムロール開始
+    [KICK, CLAP],               # 2: 盛り上がり
+    [MID_TOM, LOW_TOM],         # 3: タムロール
+    [KICK],                     # 4: 再度キック
+    [SNARE, CRASH],             # 5: スネア＋クラッシュで加速
+    [KICK, HIGH_TOM, CLAP],    # 6: トリプル音で最高潮
+    [CRASH]                     # 7: クラッシュで締める
   ]
   
   GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
