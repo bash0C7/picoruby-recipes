@@ -72,12 +72,6 @@ md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: FingerDrum::MID
 sleep_ms(10)
 md_uart.clear_rx_buffer
 
-# MIDI Bank Select + Program Change
-md_uart.write((0xB9).chr + (32).chr + (16).chr)
-sleep_ms(10)
-md_uart.write((0xC9).chr + (0).chr)
-sleep_ms(10)
-
 # 内蔵LED初期化
 led_strip = WS2812.new(RMTDriver.new(MatrixLED::LED_PIN))
 
@@ -91,21 +85,21 @@ button_26 = GPIO.new(26, GPIO::IN|GPIO::PULL_UP)
 button_32 = GPIO.new(32, GPIO::IN|GPIO::PULL_UP)
 
 # GPIO39 IRQ登録（クラッシュシンバル）
-irq_39 = button_39.irq(GPIO::EDGE_FALL, debounce: 5,
+irq_39 = button_39.irq(GPIO::EDGE_FALL, debounce: 10,
                        capture: {drum: drum, led: led, pin: 39}) do |btn, ev, cap|
   cap[:drum].play_note(cap[:pin])
   cap[:led].flash(cap[:pin])
 end
 
 # GPIO26 IRQ登録（バスドラム）
-irq_26 = button_26.irq(GPIO::EDGE_FALL, debounce: 5,
+irq_26 = button_26.irq(GPIO::EDGE_FALL, debounce: 10,
                        capture: {drum: drum, led: led, pin: 26}) do |btn, ev, cap|
   cap[:drum].play_note(cap[:pin])
   cap[:led].flash(cap[:pin])
 end
 
 # GPIO32 IRQ登録（スネア）
-irq_32 = button_32.irq(GPIO::EDGE_FALL, debounce: 5,
+irq_32 = button_32.irq(GPIO::EDGE_FALL, debounce: 10,
                        capture: {drum: drum, led: led, pin: 32}) do |btn, ev, cap|
   cap[:drum].play_note(cap[:pin])
   cap[:led].flash(cap[:pin])
