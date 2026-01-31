@@ -119,7 +119,7 @@ require 'pwm'
 require 'i2c'
 require 'mpu6886'
 require 'vl53l0x'
-# require 'iir_filter'  # IIRFilter無効化（速度制限で代替）
+require 'iir_filter'
 
 class NoiseInstrument
   SPEAKER_PIN = 33
@@ -140,7 +140,6 @@ class NoiseInstrument
   CUTOFF_SCALE = 30                     # Z軸→カットオフ風効果(duty微調整)
 
   DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
-  MAX_FREQ_CHANGE_PER_MS = 100          # 周波数変化速度制限(Hz/ms)。素早いグリッサンド
   FADE_RATE = 0.2                       # ノイズ時のフェードアウト減衰率(20%/frame)
 
   attr_reader :current_freq, :current_duty, :distance
@@ -157,6 +156,7 @@ class NoiseInstrument
     @prev_set_freq = nil  # 前回設定した周波数
     @prev_set_duty = nil  # 前回設定したduty
     @unstable_frames = 0  # ノイズフレームカウント
+    @distance_filter = IIRFilter.new  # IIRFilterで距離を平滑化
 
     @freq_range = FREQ_MAX - FREQ_MIN
     @dist_range = DIST_VALID_MAX - DIST_VALID_MIN
@@ -174,29 +174,20 @@ class NoiseInstrument
       return
     end
 
-    @distance = raw_distance
+    # IIRFilterで距離を平滑化
+    @distance = @distance_filter.filter(raw_distance)
     @unstable_frames = 0
 
-    # 有効信号：周波数計算
-    target_freq = FREQ_MIN + (raw_distance - DIST_VALID_MIN) * @freq_range / @dist_range
+    # 有効信号：周波数計算（平滑化された距離から直接周波数を設定）
+    @current_freq = FREQ_MIN + (@distance - DIST_VALID_MIN) * @freq_range / @dist_range
     @target_duty = BASE_DUTY
-
-    # 速度制限（グリッサンド効果）
-    freq_diff = target_freq - @current_freq
-    if freq_diff > MAX_FREQ_CHANGE_PER_MS
-      @current_freq += MAX_FREQ_CHANGE_PER_MS
-    elsif freq_diff < -MAX_FREQ_CHANGE_PER_MS
-      @current_freq -= MAX_FREQ_CHANGE_PER_MS
-    else
-      @current_freq = target_freq
-    end
 
     if @prev_set_freq != @current_freq
       @speaker.frequency(@current_freq)
       @prev_set_freq = @current_freq
     end
 
-    puts "D #{raw_distance}, TF #{target_freq}, CF #{@current_freq}" if DEBUG
+    puts "D #{raw_distance}, CF #{@current_freq}" if DEBUG
   end
   
   def update_accel
@@ -307,17 +298,10 @@ loop do
   # 毎ループ: distance取得して音を鳴らす
   instrument.update_distance
 
-  # 2ループに1度: accel更新
   if loop_counter % 2 == 0
     accel_data = instrument.update_accel
-  end
-
-  # 毎ループ: LED色計算
-  led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance,
+    led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance,
                  accel_data[:x], accel_data[:y], accel_data[:z])
-
-  # 2ループに1度: LED表示
-  if loop_counter % 2 == 0
     led_viz.show
   end
 
