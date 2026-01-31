@@ -12,7 +12,8 @@
       "Bash(rake check_env:*)",
       "WebFetch(domain:docs.espressif.com)",
       "WebFetch(domain:www.samgalope.dev)",
-      "WebFetch(domain:docs.m5stack.com)"
+      "WebFetch(domain:docs.m5stack.com)",
+      "Bash(ls:*)"
     ],
     "deny": [
       "Bash(git push:*)",
