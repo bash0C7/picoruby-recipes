@@ -9,7 +9,7 @@ require 'uart'
 class DrumMachine
   MIDI_TX_PIN = 22
   MIDI_RX_PIN = 19
-  DRUM_INTERVAL = 2     # ドラム発音間隔(ms)。小さくすると速く
+  DRUM_INTERVAL = 10     # ドラム発音間隔(ms)。小さくすると速く
   
   KICK = 36
   SNARE = 38
@@ -21,20 +21,32 @@ class DrumMachine
   LOW_TOM = 41
   CRASH = 49
   
-  # 基本パターン（KICK/SNARE除外。ハイハット・タム・クラップのみ）
+  # 基本パターン（8ビート2小節。複数の音が同時に鳴るステップあり）
   BASIC_PATTERN = [
-    HI_HAT_CLOSE, HI_HAT_CLOSE, HI_HAT_CLOSE, HI_HAT_CLOSE,
-    HI_HAT_CLOSE, HI_HAT_CLOSE, HI_HAT_CLOSE, HI_HAT_OPEN,
-    MID_TOM, MID_TOM, HI_HAT_CLOSE, HI_HAT_CLOSE,
-    CLAP, CLAP, LOW_TOM, LOW_TOM
+    [LOW_TOM],                  # 0: 1拍表
+    [HI_HAT_CLOSE],             # 1: 1拍裏
+    [],                         # 2: 2拍表
+    [HI_HAT_CLOSE, MID_TOM],   # 3: 2拍裏
+    [CLAP],                     # 4: 3拍表
+    [HI_HAT_CLOSE],             # 5: 3拍裏
+    [HI_HAT_OPEN],              # 6: 4拍表
+    [HI_HAT_CLOSE, LOW_TOM],   # 7: 4拍裏
+    [LOW_TOM],                  # 8: 5拍表
+    [HI_HAT_CLOSE],             # 9: 5拍裏
+    [CLAP],                     # 10: 6拍表
+    [HI_HAT_CLOSE, MID_TOM],   # 11: 6拍裏
+    [],                         # 12: 7拍表
+    [HI_HAT_CLOSE],             # 13: 7拍裏
+    [HI_HAT_OPEN],              # 14: 8拍表
+    [HI_HAT_CLOSE, LOW_TOM]    # 15: 8拍裏
   ]
 
   # フィルインパターン（完全版。全ドラム音使用）
   FILL_IN_PATTERN = [
-    KICK, HIGH_TOM, SNARE, MID_TOM,
-    KICK, HIGH_TOM, SNARE, LOW_TOM,
-    KICK, CRASH, SNARE, CRASH,
-    KICK, HIGH_TOM, SNARE, CRASH
+    [KICK],      [HIGH_TOM],   [SNARE],     [MID_TOM],
+    [KICK],      [HIGH_TOM],   [SNARE],     [LOW_TOM],
+    [KICK],      [CRASH],      [SNARE],     [CRASH],
+    [KICK],      [HIGH_TOM],   [SNARE],     [CRASH]
   ]
   
   GT = {36=>1, 38=>2, 39=>3, 49=>5, 52=>5}
@@ -51,14 +63,24 @@ class DrumMachine
   end
   
   def update
-    note = @current_pattern[@step % @current_pattern.size]
-    @uart.write((0x99).chr + note.chr + (0x60).chr)
+    notes = @current_pattern[@step % @current_pattern.size]
 
-    g = GT[note] || 4
-    if g != 5
-      @group_history.shift
-      @group_history.push(g)
+    # 複数の音を鳴らす
+    last_note = nil
+    notes.each do |note|
+      @uart.write((0x99).chr + note.chr + (0x60).chr)
+      last_note = note
     end
+
+    # グループ履歴更新（最後の音のグループを記録）
+    if last_note
+      g = GT[last_note] || 4
+      if g != 5
+        @group_history.shift
+        @group_history.push(g)
+      end
+    end
+
     @step += 1
 
     # フィルイン完了判定
@@ -149,7 +171,7 @@ class DrumMachine
 end
 
 class RhythmLEDVisualizer
-  LED_PIN = 32
+  LED_PIN = 33
   LED_COUNT = 30
   
   HUES_DRUM = [nil, 0, 128, 192, 64, 0]
@@ -226,8 +248,8 @@ loop do
   # 外部MIDI受信（毎フレーム）
   drum.process_external_midi
 
-  # LED更新（85msごと）
-  if tick_count % 85 == 0
+  # LED更新
+  if tick_count % DrumMachine::DRUM_INTERVAL == 0
     led_viz.update(drum.group_history, drum.external_group_history, drum.step)
     led_viz.show
   end
