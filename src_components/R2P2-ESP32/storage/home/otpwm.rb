@@ -126,9 +126,9 @@ class NoiseInstrument
   I2C_SCL_PIN = 21
 
   DIST_VALID_MIN = 25       # センサーが「信用できる」最小値(mm)
-  DIST_VALID_MAX = 2000     # センサーが「信用できる」最大値(mm)
+  DIST_VALID_MAX = 300     # センサーが「信用できる」最大値(mm)
   FREQ_MIN = 400            # 最低周波数(Hz)。ノイズ的な低音（2オクターブアップ）
-  FREQ_MAX = 4000           # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
+  FREQ_MAX = 2500           # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
 
   BASE_DUTY = 40           # 基準duty比(%)
   DUTY_MIN = 25            # 最小duty比(%)
@@ -244,7 +244,7 @@ class AmbientLEDVisualizer
     freq_sat = ((freq - NoiseInstrument::FREQ_MIN) * 255 / NoiseInstrument::FREQ_MAX).clamp(0, 255)
     saturation = ((duty_sat + freq_sat) / 2).clamp(180, 255)
 
-    brightness = ((duty - 1) * 100 / NoiseInstrument::DUTY_MAX).clamp(10, 100)
+    brightness = ((duty - 1) * 75 / NoiseInstrument::DUTY_MAX).clamp(10, 75)
 
     accel_influence = ((accel_x + accel_y + accel_z) * 50).to_i
 
