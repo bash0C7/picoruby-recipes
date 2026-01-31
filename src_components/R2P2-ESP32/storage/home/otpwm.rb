@@ -128,7 +128,7 @@ class NoiseInstrument
   DIST_VALID_MIN = 25       # センサーが「信用できる」最小値(mm)
   DIST_VALID_MAX = 2000     # センサーが「信用できる」最大値(mm)
   FREQ_MIN = 400            # 最低周波数(Hz)。ノイズ的な低音（2オクターブアップ）
-  FREQ_MAX = 8000           # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
+  FREQ_MAX = 4000           # 最高周波数(Hz)。攻撃的な高音（2オクターブアップ）
 
   BASE_DUTY = 40           # 基準duty比(%)
   DUTY_MIN = 25            # 最小duty比(%)
@@ -157,11 +157,12 @@ class NoiseInstrument
     @prev_set_duty = nil  # 前回設定したduty
     @unstable_frames = 0  # ノイズフレームカウント
 
-    @freq_range = FREQ_MAX - FREQ_MIN
+    @freq_ratio = FREQ_MAX.to_f / FREQ_MIN  # 周波数比率（対数スケール用）
     @dist_range = DIST_VALID_MAX - DIST_VALID_MIN
   end
   
-  def update_distance
+  def update(accel_data)
+    # 距離計測とフィルタリング
     raw_distance = @tof_sensor.read_distance
 
     # ノイズ判定：-1、DIST_VALID_MIN未満、DIST_VALID_MAX超
@@ -174,15 +175,15 @@ class NoiseInstrument
     end
 
     # EMAで距離を平滑化（整数演算）
-    # @distance = @prev_distance + (raw_distance - @prev_distance) * ALPHA
-    # ALPHA = DISTANCE_SMOOTH_ALPHA / 100.0 だが、整数演算で実装
     delta = raw_distance - @prev_distance
     @distance = @prev_distance + (delta * DISTANCE_SMOOTH_ALPHA / 100)
     @prev_distance = @distance
     @unstable_frames = 0
 
-    # 有効信号：周波数計算（平滑化された距離から直接周波数を設定）
-    @current_freq = FREQ_MIN + (@distance - DIST_VALID_MIN) * @freq_range / @dist_range
+    # 周波数計算：対数スケール（オクターブ感覚）
+    # freq = FREQ_MIN * (FREQ_MAX / FREQ_MIN) ^ (distance_ratio)
+    distance_ratio = (@distance - DIST_VALID_MIN).to_f / @dist_range
+    @current_freq = (FREQ_MIN * (@freq_ratio ** distance_ratio)).to_i
     @target_duty = BASE_DUTY
 
     if @prev_set_freq != @current_freq
@@ -191,9 +192,8 @@ class NoiseInstrument
     end
 
     puts "D #{raw_distance}, SD #{@distance}, CF #{@current_freq}" if DEBUG
-  end
-  
-  def update_accel(accel_data)
+
+    # 加速度処理
     vibrato = (accel_data[:y] * VIBRATO_SCALE).to_i
     new_freq = (@current_freq + vibrato).clamp(FREQ_MIN, FREQ_MAX)
 
@@ -299,16 +299,13 @@ loop_counter = 0
 loop do
   IRQ.process
 
-  # 毎ループ: distance取得して音を鳴らす
-  instrument.update_distance
-
   # 5フレームごとに加速度を取得（重い処理）
   if loop_counter % 5 == 0
     accel_data = accel_sensor.acceleration
   end
 
-  # 毎フレーム duty を更新（古い accel_data でもいい）
-  instrument.update_accel(accel_data)
+  # 毎フレーム distance + accel を処理
+  instrument.update(accel_data)
 
   if loop_counter % 2 == 0
     led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance,
