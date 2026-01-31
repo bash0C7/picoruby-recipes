@@ -1,8 +1,9 @@
-# フィンガードラム装置（完全手動モード）
+# フィンガードラム装置（完全手動モード、IRQ方式）
 DEBUG = false  # デバッグモード
 
 require 'ws2812'
 require 'gpio'
+require 'irq'
 require 'uart'
 
 class FingerDrum
@@ -18,32 +19,21 @@ class FingerDrum
 
   def initialize(uart)
     @uart = uart
-    @buttons = {}
-    @button_states = {}
-
-    BUTTON_PINS.each do |pin, note|
-      @buttons[pin] = GPIO.new(pin, GPIO::IN|GPIO::PULL_UP)
-      @button_states[pin] = false
-    end
+    @button_states = {39 => false, 26 => false, 32 => false}
   end
 
-  def update
-    # ポーリング: ボタン状態をチェック、エッジ検出
-    BUTTON_PINS.each do |pin, note|
-      current = @buttons[pin].read == 0  # LOW = 押下
-      prev = @button_states[pin]
-
-      if !prev && current  # 押下エッジ
-        play_note(note)
-        puts "Button #{pin} pressed → Note #{note}" if DEBUG
-      end
-
-      @button_states[pin] = current
-    end
-  end
-
-  def play_note(note)
+  def play_note(pin)
+    note = BUTTON_PINS[pin]
     @uart.write((0x99).chr + note.chr + (0x7F).chr)
+    puts "Button #{pin} pressed → Note #{note}" if DEBUG
+  end
+
+  def press(pin)
+    @button_states[pin] = true
+  end
+
+  def release(pin)
+    @button_states[pin] = false
   end
 
   def button_states
@@ -120,10 +110,50 @@ led_strip = WS2812.new(RMTDriver.new(MatrixLED::LED_PIN))
 drum = FingerDrum.new(md_uart)
 led = MatrixLED.new(led_strip)
 
+# 3つのボタンを個別に生成
+button_39 = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
+button_26 = GPIO.new(26, GPIO::IN|GPIO::PULL_UP)
+button_32 = GPIO.new(32, GPIO::IN|GPIO::PULL_UP)
+
+# GPIO39 IRQ登録（クラッシュシンバル）
+irq_39 = button_39.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 100,
+                       capture: {drum: drum, pin: 39}) do |btn, ev, cap|
+  case ev
+  when GPIO::EDGE_FALL  # 押下
+    cap[:drum].play_note(cap[:pin])
+    cap[:drum].press(cap[:pin])
+  when GPIO::EDGE_RISE  # リリース
+    cap[:drum].release(cap[:pin])
+  end
+end
+
+# GPIO26 IRQ登録（バスドラム）
+irq_26 = button_26.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 100,
+                       capture: {drum: drum, pin: 26}) do |btn, ev, cap|
+  case ev
+  when GPIO::EDGE_FALL
+    cap[:drum].play_note(cap[:pin])
+    cap[:drum].press(cap[:pin])
+  when GPIO::EDGE_RISE
+    cap[:drum].release(cap[:pin])
+  end
+end
+
+# GPIO32 IRQ登録（スネア）
+irq_32 = button_32.irq(GPIO::EDGE_FALL | GPIO::EDGE_RISE, debounce: 100,
+                       capture: {drum: drum, pin: 32}) do |btn, ev, cap|
+  case ev
+  when GPIO::EDGE_FALL
+    cap[:drum].play_note(cap[:pin])
+    cap[:drum].press(cap[:pin])
+  when GPIO::EDGE_RISE
+    cap[:drum].release(cap[:pin])
+  end
+end
+
 # メインループ
 loop do
-  # ボタンポーリング
-  drum.update
+  IRQ.process
 
   # LED更新（ボタン状態に基づく）
   led.update(drum.button_states)
@@ -131,3 +161,8 @@ loop do
 
   sleep_ms(1)
 end
+
+# 終了時に全IRQ解除
+irq_39.unregister
+irq_26.unregister
+irq_32.unregister
