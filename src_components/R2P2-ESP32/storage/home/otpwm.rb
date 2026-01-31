@@ -119,7 +119,6 @@ require 'pwm'
 require 'i2c'
 require 'mpu6886'
 require 'vl53l0x'
-require 'iir_filter'
 
 class NoiseInstrument
   SPEAKER_PIN = 33
@@ -141,6 +140,7 @@ class NoiseInstrument
 
   DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
   FADE_RATE = 0.2                       # ノイズ時のフェードアウト減衰率(20%/frame)
+  DISTANCE_SMOOTH_ALPHA = 50             # EMA係数（整数演算用: 0-100）50=差分の50%追随
 
   attr_reader :current_freq, :current_duty, :distance
 
@@ -153,10 +153,10 @@ class NoiseInstrument
     @current_duty = 1
     @target_duty = 1
     @distance = DIST_VALID_MIN
+    @prev_distance = DIST_VALID_MIN  # EMA用の前回値
     @prev_set_freq = nil  # 前回設定した周波数
     @prev_set_duty = nil  # 前回設定したduty
     @unstable_frames = 0  # ノイズフレームカウント
-    @distance_filter = IIRFilter.new  # IIRFilterで距離を平滑化
 
     @freq_range = FREQ_MAX - FREQ_MIN
     @dist_range = DIST_VALID_MAX - DIST_VALID_MIN
@@ -174,8 +174,12 @@ class NoiseInstrument
       return
     end
 
-    # IIRFilterで距離を平滑化
-    @distance = @distance_filter.filter(raw_distance)
+    # EMAで距離を平滑化（整数演算）
+    # @distance = @prev_distance + (raw_distance - @prev_distance) * ALPHA
+    # ALPHA = DISTANCE_SMOOTH_ALPHA / 100.0 だが、整数演算で実装
+    delta = raw_distance - @prev_distance
+    @distance = @prev_distance + (delta * DISTANCE_SMOOTH_ALPHA / 100)
+    @prev_distance = @distance
     @unstable_frames = 0
 
     # 有効信号：周波数計算（平滑化された距離から直接周波数を設定）
@@ -187,7 +191,7 @@ class NoiseInstrument
       @prev_set_freq = @current_freq
     end
 
-    puts "D #{raw_distance}, CF #{@current_freq}" if DEBUG
+    puts "D #{raw_distance}, SD #{@distance}, CF #{@current_freq}" if DEBUG
   end
   
   def update_accel
