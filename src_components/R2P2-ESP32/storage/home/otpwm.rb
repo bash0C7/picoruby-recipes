@@ -133,10 +133,11 @@ class NoiseInstrument
   BASE_DUTY = 40           # 基準duty比(%)
   DUTY_MIN = 25            # 最小duty比(%)
   DUTY_MAX = 60            # 最大duty比(%)
-  DUTY_DELTA_SCALE = 20    # X軸→duty変化の感度
 
-  VIBRATO_SCALE = 50                    # Y軸→ビブラート強さ(Hz)
-  CUTOFF_SCALE = 30                     # Z軸→カットオフ風効果(duty微調整)
+  CHOKING_THRESHOLD = 1.5       # チョーキング発動閾値
+  CHOKING_FREQ_MAX = 900        # チョーキング時の最大周波数(Hz)
+  CHOKING_DUTY_MAX = 80         # チョーキング時の最大duty比(%)
+  CHOKING_DURATION = 3          # チョーキング継続フレーム数
 
   DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
   FADE_RATE = 0.2                       # ノイズ時のフェードアウト減衰率(20%/frame)
@@ -156,6 +157,9 @@ class NoiseInstrument
     @prev_set_freq = nil  # 前回設定した周波数
     @prev_set_duty = nil  # 前回設定したduty
     @unstable_frames = 0  # ノイズフレームカウント
+
+    @prev_magnitude = 0           # 前フレームの加速度magnitude
+    @choking_frame_count = 0      # チョーキング継続フレーム数
 
     @freq_ratio = FREQ_MAX.to_f / FREQ_MIN  # 周波数比率（対数スケール用）
     @dist_range = DIST_VALID_MAX - DIST_VALID_MIN
@@ -193,18 +197,33 @@ class NoiseInstrument
 
     puts "D #{raw_distance}, SD #{@distance}, CF #{@current_freq}" if DEBUG
 
-    # 加速度処理
-    vibrato = (accel_data[:y] * VIBRATO_SCALE).to_i
-    new_freq = (@current_freq + vibrato).clamp(FREQ_MIN, FREQ_MAX)
+    # チョーキング効果：加速度のmagnitudeで制御
+    magnitude = accel_data[:x].abs + accel_data[:y].abs + accel_data[:z].abs
 
-    if @prev_set_freq != new_freq
-      @speaker.frequency(new_freq)
-      @prev_set_freq = new_freq
+    # チョーキング開始判定：加速度が閾値を超えた瞬間
+    if magnitude > CHOKING_THRESHOLD && @prev_magnitude <= CHOKING_THRESHOLD
+      @choking_frame_count = CHOKING_DURATION
+      puts "CHOKING START! mag=#{magnitude}" if DEBUG
     end
 
-    duty_delta = (accel_data[:x] * DUTY_DELTA_SCALE).to_i
-    cutoff_effect = (accel_data[:z] * CUTOFF_SCALE).to_i
-    target_with_effects = (@target_duty + duty_delta + cutoff_effect).clamp(DUTY_MIN, DUTY_MAX)
+    if @choking_frame_count > 0
+      # チョーキング中：周波数とdutyを最大値に設定
+      if @prev_set_freq != CHOKING_FREQ_MAX
+        @speaker.frequency(CHOKING_FREQ_MAX)
+        @prev_set_freq = CHOKING_FREQ_MAX
+      end
+      target_with_effects = CHOKING_DUTY_MAX
+      @choking_frame_count -= 1
+    else
+      # 通常モード：元の周波数
+      if @prev_set_freq != @current_freq
+        @speaker.frequency(@current_freq)
+        @prev_set_freq = @current_freq
+      end
+      target_with_effects = @target_duty
+    end
+
+    @prev_magnitude = magnitude
 
     if @target_duty == 1
       target_with_effects = 1
@@ -238,9 +257,9 @@ class AmbientLEDVisualizer
     # 色相：距離のみで決定（DIST_VALID_MIN～DIST_VALID_MAX → 0～384）
     hue_base = ((distance - NoiseInstrument::DIST_VALID_MIN) * 384 / (NoiseInstrument::DIST_VALID_MAX - NoiseInstrument::DIST_VALID_MIN)).to_i
 
-    # 彩度：加速度（X軸、Y軸）で決定、静止時でも30%を保持
-    accel_xy = ((accel_x.abs + accel_y.abs) * 112).to_i  # 最大225を加算
-    saturation = (30 + accel_xy).clamp(30, 255)
+    # 彩度：基本200（鮮やか）、加速度で最大255まで上昇
+    accel_xy = ((accel_x.abs + accel_y.abs) * 55).to_i  # 最大55を加算
+    saturation = (200 + accel_xy).clamp(200, 255)
 
     # 輝度：加速度（Z軸）で決定、静止時でも30%を保持
     accel_z_effect = (accel_z.abs * 30).to_i  # 最大30を加算
