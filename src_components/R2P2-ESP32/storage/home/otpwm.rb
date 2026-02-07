@@ -134,10 +134,8 @@ class NoiseInstrument
   DUTY_MIN = 25            # 最小duty比(%)
   DUTY_MAX = 60            # 最大duty比(%)
 
-  CHOKING_THRESHOLD = 1.5       # チョーキング発動閾値
-  CHOKING_FREQ_MAX = 900        # チョーキング時の最大周波数(Hz)
-  CHOKING_DUTY_MAX = 80         # チョーキング時の最大duty比(%)
-  CHOKING_DURATION = 3          # チョーキング継続フレーム数
+  WAH_DEPTH_SCALE = 10      # 加速度→ワウ深さ変換係数（duty変調±%）
+  WAH_SPEED = 50            # ワウLFOの周期（フレーム数、大きいほど遅い）
 
   DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
   FADE_RATE = 0.2                       # ノイズ時のフェードアウト減衰率(20%/frame)
@@ -158,8 +156,7 @@ class NoiseInstrument
     @prev_set_duty = nil  # 前回設定したduty
     @unstable_frames = 0  # ノイズフレームカウント
 
-    @prev_magnitude = 0           # 前フレームの加速度magnitude
-    @choking_frame_count = 0      # チョーキング継続フレーム数
+    @wah_phase = 0           # ワウLFOの位相（0～WAH_SPEED-1）
 
     @freq_ratio = FREQ_MAX.to_f / FREQ_MIN  # 周波数比率（対数スケール用）
     @dist_range = DIST_VALID_MAX - DIST_VALID_MIN
@@ -197,33 +194,24 @@ class NoiseInstrument
 
     puts "D #{raw_distance}, SD #{@distance}, CF #{@current_freq}" if DEBUG
 
-    # チョーキング効果：加速度のmagnitudeで制御
+    # ワウ効果：加速度の合計値でワウ深さを決定
     magnitude = accel_data[:x].abs + accel_data[:y].abs + accel_data[:z].abs
 
-    # チョーキング開始判定：加速度が閾値を超えた瞬間
-    if magnitude > CHOKING_THRESHOLD && @prev_magnitude <= CHOKING_THRESHOLD
-      @choking_frame_count = CHOKING_DURATION
-      puts "CHOKING START! mag=#{magnitude}" if DEBUG
-    end
-
-    if @choking_frame_count > 0
-      # チョーキング中：周波数とdutyを最大値に設定
-      if @prev_set_freq != CHOKING_FREQ_MAX
-        @speaker.frequency(CHOKING_FREQ_MAX)
-        @prev_set_freq = CHOKING_FREQ_MAX
-      end
-      target_with_effects = CHOKING_DUTY_MAX
-      @choking_frame_count -= 1
+    # 三角波LFO生成: -100 ～ +100 の範囲
+    half_period = WAH_SPEED / 2
+    if @wah_phase < half_period
+      lfo = -100 + (@wah_phase * 200 / half_period)
     else
-      # 通常モード：元の周波数
-      if @prev_set_freq != @current_freq
-        @speaker.frequency(@current_freq)
-        @prev_set_freq = @current_freq
-      end
-      target_with_effects = @target_duty
+      lfo = 100 - ((@wah_phase - half_period) * 200 / half_period)
     end
+    @wah_phase = (@wah_phase + 1) % WAH_SPEED
 
-    @prev_magnitude = magnitude
+    # ワウ効果適用：magnitude × LFO × スケール係数
+    wah_depth = (magnitude * WAH_DEPTH_SCALE).to_i
+    wah_modulation = (lfo * wah_depth / 100).to_i
+
+    # target_dutyにワウ変調を加算
+    target_with_effects = (@target_duty + wah_modulation).clamp(DUTY_MIN, DUTY_MAX)
 
     if @target_duty == 1
       target_with_effects = 1
