@@ -231,8 +231,17 @@ class AmbientLEDVisualizer
     distance_offset = (distance * 2) % 384  # distanceでオフセットが大きく変化
     @wave_offset = (distance_offset + (@wave_offset + 1)) % 384
 
-    # 色相：距離のみで決定（DIST_VALID_MIN～DIST_VALID_MAX → 0～384）
-    hue_base = ((distance - NoiseInstrument::DIST_VALID_MIN) * 384 / (NoiseInstrument::DIST_VALID_MAX - NoiseInstrument::DIST_VALID_MIN)).to_i
+    # 色相：距離を4帯域に分割し、帯域ごとに色を割り当て
+    # 帯域1(20-80mm)=赤系(0-96), 帯域2(80-160mm)=シアン系(96-192), 帯域3(160-240mm)=マゼンタ系(192-288), 帯域4(240-300mm)=黄系(288-384)
+    dist_range = NoiseInstrument::DIST_VALID_MAX - NoiseInstrument::DIST_VALID_MIN
+    band_width = dist_range / 4
+    relative_dist = (distance - NoiseInstrument::DIST_VALID_MIN).to_i
+
+    band = (relative_dist / band_width).clamp(0, 3)
+    within_band = relative_dist % band_width
+
+    hue_bands = [0, 96, 192, 288]  # 各帯域の色相開始値
+    hue_base = hue_bands[band] + (within_band * 96 / band_width)
 
     # 彩度：固定
     saturation = 200
@@ -292,7 +301,7 @@ loop do
   # 毎フレーム distance を処理
   instrument.update
 
-  if loop_counter % 2 == 0
+  if loop_counter % 4 == 0
     led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance)
     led_viz.show
   end
