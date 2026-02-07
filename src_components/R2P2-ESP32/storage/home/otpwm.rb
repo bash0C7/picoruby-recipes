@@ -1,14 +1,29 @@
 DEBUG = true  # デバッグモード。true=デバッグ出力、false=デバッグ出力なし
-MUTE = false   # PWM消音モード。true=音を出さず数字を表示 false=実際に音を出す
 NOISE_MODE = false  # ノイズ音モード。true=ノイズ音、false=通常BEEP音
 
 module Speaker
+  def initialize_speaker(muted: true)
+    @muted = muted
+    @target_duty = 0
+  end
+
   def frequency(f)
     set_frequency(f)
   end
 
   def duty(d)
-    set_duty(d)
+    @target_duty = d
+    set_duty(@muted ? 0 : d)
+  end
+
+  def toggle_mute
+    @muted = !@muted
+    set_duty(@muted ? 0 : @target_duty)
+    puts "Mute: #{@muted}" if defined?(DEBUG) && DEBUG
+  end
+
+  def muted?
+    @muted
   end
 
   protected
@@ -26,8 +41,8 @@ class DPWM
   include Speaker
 
   def initialize(pin, param = {})
+    initialize_speaker(muted: param.fetch(:muted, true))
     puts "new #{pin}, #{param.to_s}"
-    @mute = param[:mute]
   end
 
   protected
@@ -45,6 +60,7 @@ class SimplePWM
   include Speaker
 
   def initialize(pin, param = {})
+    initialize_speaker(muted: param.fetch(:muted, true))
     @pwm = PWM.new(pin, param)
   end
 
@@ -85,6 +101,7 @@ class NoisyPWM
   FREQ_STABLE_RANGE = 5  # 周波数微調整(Hz)。基本周波数を維持
 
   def initialize(pin, param = {})
+    initialize_speaker(muted: param.fetch(:muted, true))
     @pwm = PWM.new(pin, param)
     @random = SimpleRandom.new
     @base_freq = param[:frequency] || 100
@@ -245,13 +262,11 @@ class AmbientLEDVisualizer
     # 色相：距離のみで決定（DIST_VALID_MIN～DIST_VALID_MAX → 0～384）
     hue_base = ((distance - NoiseInstrument::DIST_VALID_MIN) * 384 / (NoiseInstrument::DIST_VALID_MAX - NoiseInstrument::DIST_VALID_MIN)).to_i
 
-    # 彩度：基本200（鮮やか）、加速度で最大255まで上昇
-    accel_xy = ((accel_x.abs + accel_y.abs) * 55).to_i  # 最大55を加算
-    saturation = (200 + accel_xy).clamp(200, 255)
+    # 彩度：固定
+    saturation = 200
 
-    # 輝度：加速度（Z軸）で決定、静止時でも30%を保持
-    accel_z_effect = (accel_z.abs * 30).to_i  # 最大30を加算
-    brightness = (30 + accel_z_effect).clamp(30, 60)
+    # 輝度：dutyの値で決定（1-60 → 10-100の線形マッピング）
+    brightness = ((duty - 1) * 90 / (NoiseInstrument::DUTY_MAX - 1) + 10).clamp(10, 100)
 
     LED_COUNT.times do |i|
       hue = (hue_base + @wave_offset + i * 10) % 384
@@ -269,9 +284,7 @@ class AmbientLEDVisualizer
   end
 end
 
-speaker = if MUTE
-  DPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 0, mute: MUTE)
-elsif NOISE_MODE
+speaker = if NOISE_MODE
   NoisyPWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 500, duty: 0)
 else
   SimplePWM.new(NoiseInstrument::SPEAKER_PIN, frequency: 100, duty: 0)
@@ -294,7 +307,8 @@ sleep_ms(100)
 instrument = NoiseInstrument.new(speaker, tof_sensor)
 led_viz = AmbientLEDVisualizer.new(led_strip)
 
-irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {viz: led_viz}) do |btn, ev, cap|
+irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {viz: led_viz, spk: speaker}) do |btn, ev, cap|
+  cap[:spk].toggle_mute
   cap[:viz].flash
 end
 
