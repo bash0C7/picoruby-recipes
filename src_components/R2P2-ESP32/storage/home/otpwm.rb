@@ -19,7 +19,7 @@ module Speaker
   def toggle_mute
     @muted = !@muted
     set_duty(@muted ? 0 : @target_duty)
-    puts "Mute: #{@muted}" if defined?(DEBUG) && DEBUG
+    puts "Mute: #{@muted}" if DEBUG
   end
 
   def muted?
@@ -41,7 +41,7 @@ class DPWM
   include Speaker
 
   def initialize(pin, param = {})
-    initialize_speaker(muted: param.fetch(:muted, true))
+    initialize_speaker(muted: param[:muted] == false ? false : true)
     puts "new #{pin}, #{param.to_s}"
   end
 
@@ -60,7 +60,7 @@ class SimplePWM
   include Speaker
 
   def initialize(pin, param = {})
-    initialize_speaker(muted: param.fetch(:muted, true))
+    initialize_speaker(muted: param[:muted] == false ? false : true)
     @pwm = PWM.new(pin, param)
   end
 
@@ -101,7 +101,7 @@ class NoisyPWM
   FREQ_STABLE_RANGE = 5  # 周波数微調整(Hz)。基本周波数を維持
 
   def initialize(pin, param = {})
-    initialize_speaker(muted: param.fetch(:muted, true))
+    initialize_speaker(muted: param[:muted] == false ? false : true)
     @pwm = PWM.new(pin, param)
     @random = SimpleRandom.new
     @base_freq = param[:frequency] || 100
