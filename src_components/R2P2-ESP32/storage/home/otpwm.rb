@@ -151,9 +151,6 @@ class NoiseInstrument
   DUTY_MIN = 25            # 最小duty比(%)
   DUTY_MAX = 60            # 最大duty比(%)
 
-  WAH_DEPTH_SCALE = 10      # 加速度→ワウ深さ変換係数（duty変調±%）
-  WAH_SPEED = 50            # ワウLFOの周期（フレーム数、大きいほど遅い）
-
   DUTY_SMOOTH_FACTOR = 1                # duty変化の滑らかさ（即座反応）
   FADE_RATE = 0.2                       # ノイズ時のフェードアウト減衰率(20%/frame)
   DISTANCE_SMOOTH_ALPHA = 50             # EMA係数（整数演算用: 0-100）50=差分の50%追随
@@ -173,13 +170,11 @@ class NoiseInstrument
     @prev_set_duty = nil  # 前回設定したduty
     @unstable_frames = 0  # ノイズフレームカウント
 
-    @wah_phase = 0           # ワウLFOの位相（0～WAH_SPEED-1）
-
     @freq_ratio = FREQ_MAX.to_f / FREQ_MIN  # 周波数比率（対数スケール用）
     @dist_range = DIST_VALID_MAX - DIST_VALID_MIN
   end
   
-  def update(accel_data)
+  def update
     # 距離計測とフィルタリング
     raw_distance = @tof_sensor.read_distance
 
@@ -211,30 +206,7 @@ class NoiseInstrument
 
     puts "D #{raw_distance}, SD #{@distance}, CF #{@current_freq}" if DEBUG
 
-    # ワウ効果：加速度の合計値でワウ深さを決定
-    magnitude = accel_data[:x].abs + accel_data[:y].abs + accel_data[:z].abs
-
-    # 三角波LFO生成: -100 ～ +100 の範囲
-    half_period = WAH_SPEED / 2
-    if @wah_phase < half_period
-      lfo = -100 + (@wah_phase * 200 / half_period)
-    else
-      lfo = 100 - ((@wah_phase - half_period) * 200 / half_period)
-    end
-    @wah_phase = (@wah_phase + 1) % WAH_SPEED
-
-    # ワウ効果適用：magnitude × LFO × スケール係数
-    wah_depth = (magnitude * WAH_DEPTH_SCALE).to_i
-    wah_modulation = (lfo * wah_depth / 100).to_i
-
-    # target_dutyにワウ変調を加算
-    target_with_effects = (@target_duty + wah_modulation).clamp(DUTY_MIN, DUTY_MAX)
-
-    if @target_duty == 1
-      target_with_effects = 1
-    end
-
-    @current_duty += (target_with_effects - @current_duty) / DUTY_SMOOTH_FACTOR
+    @current_duty += (@target_duty - @current_duty) / DUTY_SMOOTH_FACTOR
     @current_duty = @current_duty.clamp(1, DUTY_MAX)
 
     if @prev_set_duty != @current_duty
@@ -254,7 +226,7 @@ class AmbientLEDVisualizer
     @wave_offset = 0
   end
   
-  def update(freq, duty, distance, accel_x, accel_y, accel_z)
+  def update(freq, duty, distance)
     # 距離に基づいてLED波形オフセットを大きく変動
     distance_offset = (distance * 2) % 384  # distanceでオフセットが大きく変化
     @wave_offset = (distance_offset + (@wave_offset + 1)) % 384
@@ -312,23 +284,16 @@ irq = button.irq(GPIO::EDGE_FALL, debounce: 100, capture: {viz: led_viz, spk: sp
   cap[:viz].flash
 end
 
-accel_data = {x: 0, y: 0, z: 0}
 loop_counter = 0
 
 loop do
   IRQ.process
 
-  # 5フレームごとに加速度を取得（重い処理）
-  if loop_counter % 5 == 0
-    accel_data = accel_sensor.acceleration
-  end
-
-  # 毎フレーム distance + accel を処理
-  instrument.update(accel_data)
+  # 毎フレーム distance を処理
+  instrument.update
 
   if loop_counter % 2 == 0
-    led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance,
-                 accel_data[:x], accel_data[:y], accel_data[:z])
+    led_viz.update(instrument.current_freq, instrument.current_duty, instrument.distance)
     led_viz.show
   end
 
