@@ -74,7 +74,7 @@ class DrumMachine
     # 複数の音を鳴らす
     last_note = nil
     notes.each do |note|
-      @uart.write((0x99).chr + note.chr + (0x60).chr)
+      @uart.write((0x99).chr + note.chr + (0x46).chr)
       last_note = note
 
       # クラッシュシンバル検出
