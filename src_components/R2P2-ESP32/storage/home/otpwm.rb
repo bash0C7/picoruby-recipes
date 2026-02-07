@@ -227,9 +227,8 @@ class AmbientLEDVisualizer
   end
   
   def update(freq, duty, distance)
-    # 距離に基づいてLED波形オフセットを大きく変動
-    distance_offset = (distance * 2) % 384  # distanceでオフセットが大きく変化
-    @wave_offset = (distance_offset + (@wave_offset + 1)) % 384
+    # 距離に基づいてLED波形オフセットを制御（距離が変わってなければオフセットも固定）
+    @wave_offset = (distance * 2) % 384  # distanceだけで決定。距離が変わってなければ固定
 
     # 色相：距離を4帯域に分割し、帯域ごとに色を割り当て
     # 帯域1(20-80mm)=赤系(0-96), 帯域2(80-160mm)=シアン系(96-192), 帯域3(160-240mm)=マゼンタ系(192-288), 帯域4(240-300mm)=黄系(288-384)
