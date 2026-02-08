@@ -92,14 +92,14 @@ irq_39 = button_39.irq(GPIO::EDGE_FALL, debounce: 200,
 end
 
 # GPIO26 IRQ登録（バスドラム）
-irq_26 = button_26.irq(GPIO::EDGE_FALL, debounce: 200,
+irq_26 = button_26.irq(GPIO::EDGE_FALL, debounce: 150,
                        capture: {drum: drum, led: led, pin: 26}) do |btn, ev, cap|
   cap[:drum].play_note(cap[:pin])
   cap[:led].flash(cap[:pin])
 end
 
 # GPIO32 IRQ登録（スネア）
-irq_32 = button_32.irq(GPIO::EDGE_FALL, debounce: 200,
+irq_32 = button_32.irq(GPIO::EDGE_FALL, debounce: 150,
                        capture: {drum: drum, led: led, pin: 32}) do |btn, ev, cap|
   cap[:drum].play_note(cap[:pin])
   cap[:led].flash(cap[:pin])
@@ -111,12 +111,12 @@ loop do
   IRQ.process
 
   # LED常時アイドル表示（うっすらグレー、10msごとに更新）
-  if loop_counter % 10 == 0
+  if loop_counter % 5 == 0
     led.show_idle
   end
 
   loop_counter += 1
-  sleep_ms(1)
+  sleep_ms(2)
 end
 
 # 終了時に全IRQ解除

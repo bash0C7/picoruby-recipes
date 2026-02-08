@@ -9,7 +9,7 @@ require 'uart'
 class DrumMachine
   MIDI_TX_PIN = 22
   MIDI_RX_PIN = 19
-  DRUM_INTERVAL = 10     # ドラム発音間隔(ms)。小さくすると速く
+  DRUM_INTERVAL = 12     # ドラム発音間隔(ms)。小さくすると速く
   
   KICK = 36
   SNARE = 38
@@ -324,8 +324,11 @@ loop do
     )
     led_viz.show
   end
+  if tick_count % 2 == 0
+    led_viz.show
+  end
 
-  sleep_ms(1)
+  #sleep_ms(1)
 end
 
 irq.unregister
