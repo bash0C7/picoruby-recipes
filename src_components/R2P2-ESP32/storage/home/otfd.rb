@@ -1,4 +1,4 @@
-# フィンガードラム装置（完全手動モード、IRQ方式）
+# フィンガードラム装置（Chain DualKey用、完全手動モード、IRQ方式）
 DEBUG = false  # デバッグモード
 
 require 'ws2812'
@@ -7,14 +7,13 @@ require 'irq'
 require 'uart'
 
 class FingerDrum
-  MIDI_TX_PIN = 22
-  MIDI_RX_PIN = 19
+  MIDI_TX_PIN = 6
+  MIDI_RX_PIN = 5
 
   # ボタン → ドラム音マッピング
   BUTTON_PINS = {
-    39 => 49,  # GPIO39(内蔵) → CRASH (49)
-    26 => 36,  # GPIO26(Grove) → KICK (36)
-    32 => 38   # GPIO32(Grove) → SNARE (38)
+    17 => 36,  # GPIO17(KEY1) → KICK (36)
+    0 => 38    # GPIO0(KEY2) → SNARE (38)
   }
 
   def initialize(uart)
@@ -28,15 +27,14 @@ class FingerDrum
   end
 end
 
-class MatrixLED
-  LED_PIN = 27
-  LED_COUNT = 25
+class DualKeyLED
+  LED_PIN = 21
+  LED_COUNT = 2
 
   # ボタン → RGB色マッピング（フラッシュ時の最大輝度版）
   FLASH_COLORS = {
-    39 => {r: 255, g: 255, b: 0},    # CRASH → 鮮やかな黄色
-    26 => {r: 255, g: 0, b: 0},      # KICK → 鮮やかな赤
-    32 => {r: 0, g: 255, b: 255}     # SNARE → 鮮やかなシアン
+    17 => {r: 255, g: 0, b: 0},      # KICK → 鮮やかな赤
+    0 => {r: 0, g: 255, b: 255}      # SNARE → 鮮やかなシアン
   }
 
   # アイドル時のグレー色（電源ON表示）
@@ -67,40 +65,37 @@ class MatrixLED
   end
 end
 
-# MIDI初期化
-md_uart = UART.new(unit: :ESP32_UART1, baudrate: 31250, txd_pin: FingerDrum::MIDI_TX_PIN, rxd_pin: FingerDrum::MIDI_RX_PIN)
+# MIDI初期化（Chain Bus左側: GPIO6/GPIO5 = UART2）
+md_uart = UART.new(unit: :ESP32_UART2, baudrate: 31250, txd_pin: FingerDrum::MIDI_TX_PIN, rxd_pin: FingerDrum::MIDI_RX_PIN)
 sleep_ms(10)
 md_uart.clear_rx_buffer
 
+# WS2812B電源制御（GPIO40をON）
+led_power = GPIO.new(40, GPIO::OUT)
+led_power.write(1)
+sleep_ms(10)
+
 # 内蔵LED初期化
-led_strip = WS2812.new(RMTDriver.new(MatrixLED::LED_PIN))
+led_strip = WS2812.new(RMTDriver.new(DualKeyLED::LED_PIN))
 
 # 装置初期化
 drum = FingerDrum.new(md_uart)
-led = MatrixLED.new(led_strip)
+led = DualKeyLED.new(led_strip)
 
-# 3つのボタンを個別に生成
-button_39 = GPIO.new(39, GPIO::IN|GPIO::PULL_UP)
-button_26 = GPIO.new(26, GPIO::IN|GPIO::PULL_UP)
-button_32 = GPIO.new(32, GPIO::IN|GPIO::PULL_UP)
+# 2つのボタンを個別に生成
+button_17 = GPIO.new(17, GPIO::IN|GPIO::PULL_UP)
+button_0 = GPIO.new(0, GPIO::IN|GPIO::PULL_UP)
 
-# GPIO39 IRQ登録（クラッシュシンバル）
-irq_39 = button_39.irq(GPIO::EDGE_FALL, debounce: 200,
-                       capture: {drum: drum, led: led, pin: 39}) do |btn, ev, cap|
+# GPIO17 IRQ登録（バスドラム）
+irq_17 = button_17.irq(GPIO::EDGE_FALL, debounce: 150,
+                       capture: {drum: drum, led: led, pin: 17}) do |btn, ev, cap|
   cap[:drum].play_note(cap[:pin])
   cap[:led].flash(cap[:pin])
 end
 
-# GPIO26 IRQ登録（バスドラム）
-irq_26 = button_26.irq(GPIO::EDGE_FALL, debounce: 150,
-                       capture: {drum: drum, led: led, pin: 26}) do |btn, ev, cap|
-  cap[:drum].play_note(cap[:pin])
-  cap[:led].flash(cap[:pin])
-end
-
-# GPIO32 IRQ登録（スネア）
-irq_32 = button_32.irq(GPIO::EDGE_FALL, debounce: 150,
-                       capture: {drum: drum, led: led, pin: 32}) do |btn, ev, cap|
+# GPIO0 IRQ登録（スネア）※注意: GPIO0はブートピン
+irq_0 = button_0.irq(GPIO::EDGE_FALL, debounce: 150,
+                     capture: {drum: drum, led: led, pin: 0}) do |btn, ev, cap|
   cap[:drum].play_note(cap[:pin])
   cap[:led].flash(cap[:pin])
 end
@@ -120,6 +115,5 @@ loop do
 end
 
 # 終了時に全IRQ解除
-irq_39.unregister
-irq_26.unregister
-irq_32.unregister
+irq_17.unregister
+irq_0.unregister
