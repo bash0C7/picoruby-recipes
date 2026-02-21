@@ -169,6 +169,68 @@ def check_commands_in_esp_env
   system("bash", "-c", setup_script)
 end
 
+# Get app name from environment variable
+def get_app_name
+  ENV['APP']
+end
+
+# Compile Ruby files and prepare app.mrb
+def compile_and_prepare_mrb(app_name = nil)
+  src_home = 'src_components/R2P2-ESP32/storage/home'
+  comp_home = 'components/R2P2-ESP32/storage/home'
+  picorbc = './components/R2P2-ESP32/components/picoruby-esp32/picoruby/bin/picorbc'
+
+  # Remove .rb and .mrb files from components/storage/home
+  if Dir.exist?(comp_home)
+    Dir.glob("#{comp_home}/*.{rb,mrb}").each do |f|
+      FileUtils.rm_f(f)
+      puts "Removed: #{f}"
+    end
+  end
+
+  # Remove .mrb files from src_components/storage/home (clean state for recompilation)
+  Dir.glob("#{src_home}/*.mrb").each do |f|
+    FileUtils.rm_f(f)
+    puts "Removed: #{f}"
+  end
+
+  # Skip compilation if picorbc not found (e.g., before init)
+  unless File.exist?(picorbc)
+    puts "Warning: picorbc not found at #{picorbc}, skipping compilation"
+    return
+  end
+
+  # Compile all .rb files in src_home
+  Dir.glob("#{src_home}/*.rb").each do |rb_file|
+    puts "Compiling: #{rb_file}"
+    unless system(picorbc, rb_file)
+      abort "Error: Failed to compile #{rb_file}"
+    end
+  end
+
+  # Create app.mrb from specified app_name
+  if app_name
+    src_mrb = "#{src_home}/#{app_name}.mrb"
+    app_mrb = "#{src_home}/app.mrb"
+    unless File.exist?(src_mrb)
+      abort "Error: #{src_mrb} not found. Check APP=#{app_name}"
+    end
+    FileUtils.cp(src_mrb, app_mrb)
+    puts "Created app.mrb from #{app_name}.mrb"
+  else
+    puts "Info: APP not specified, skipping app.mrb creation"
+  end
+end
+
+# DRY helper: compile, copy components, and build
+def build_project(app_name = nil, rake_cmd: 'rake build')
+  compile_and_prepare_mrb(app_name)
+  copy_source_components
+  Dir.chdir('components/R2P2-ESP32') do
+    execute_with_esp_env(rake_cmd)
+  end
+end
+
 # Helper method to copy source components contents
 def copy_source_components
   source_dir = 'src_components'
@@ -226,20 +288,19 @@ task :init do
         puts "Cloned R2P2-ESP32 repository"
       end
     end
-    
-    # Copy source components contents
-    copy_source_components
-    
+
     # Execute build commands in R2P2-ESP32 directory with ESP-IDF environment
     Dir.chdir('components/R2P2-ESP32') do
       execute_with_esp_env('idf.py fullclean')
       execute_with_esp_env('rake setup_esp32')
-      execute_with_esp_env('rake build')
     end
+
+    # Compile, copy components, and build
+    build_project(get_app_name)
   rescue => e
     abort "Error during setup: #{e.message}"
   end
-  
+
   puts "Setup completed successfully"
 end
 
@@ -279,20 +340,19 @@ task :update do
       end
       puts "Updated to latest with all submodules"
     end
-    
-    # Copy source components contents
-    copy_source_components
-    
+
     # Execute build commands with ESP-IDF environment
     Dir.chdir('components/R2P2-ESP32') do
       execute_with_esp_env('idf.py fullclean')
       execute_with_esp_env('rake setup_esp32')
-      execute_with_esp_env('rake build')
     end
+
+    # Compile, copy components, and build
+    build_project(get_app_name)
   rescue => e
     abort "Error during update: #{e.message}"
   end
-  
+
   puts "Update completed successfully"
 end
 
@@ -300,18 +360,19 @@ desc "クリーンビルド：fullclean、setup_esp32、rake実行"
 task :cleanbuild do
   puts "Performing clean build..."
   setup_environment
-  copy_source_components
-  
+
   begin
     Dir.chdir('components/R2P2-ESP32') do
       execute_with_esp_env('idf.py fullclean')
       execute_with_esp_env('rake setup_esp32')
-      execute_with_esp_env('rake')
     end
+
+    # Compile, copy components, and build (default rake, not 'rake build')
+    build_project(get_app_name, rake_cmd: 'rake')
   rescue => e
     abort "Error during clean build: #{e.message}"
   end
-  
+
   puts "Clean build completed successfully"
 end
 
@@ -319,17 +380,18 @@ desc "全体ビルド：setup_esp32とrake buildの実行"
 task :buildall do
   puts "Building all components..."
   setup_environment
-  copy_source_components
-  
+
   begin
     Dir.chdir('components/R2P2-ESP32') do
       execute_with_esp_env('rake setup_esp32')
-      execute_with_esp_env('rake build')
     end
+
+    # Compile, copy components, and build
+    build_project(get_app_name)
   rescue => e
     abort "Error during build all: #{e.message}"
   end
-  
+
   puts "Build all completed successfully"
 end
 
@@ -337,16 +399,14 @@ desc "ビルド：rake buildのみ実行"
 task :build do
   puts "Building project..."
   setup_environment
-  copy_source_components
-  
+
   begin
-    Dir.chdir('components/R2P2-ESP32') do
-      execute_with_esp_env('rake build')
-    end
+    # Compile, copy components, and build
+    build_project(get_app_name)
   rescue => e
     abort "Error during build: #{e.message}"
   end
-  
+
   puts "Build completed successfully"
 end
 
