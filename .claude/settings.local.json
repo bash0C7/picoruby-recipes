@@ -13,7 +13,8 @@
       "WebFetch(domain:docs.espressif.com)",
       "WebFetch(domain:www.samgalope.dev)",
       "WebFetch(domain:docs.m5stack.com)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Read(//Users/bash/src/Arduino/picoruby-ot/**)"
     ],
     "deny": [
       "Bash(git push:*)",
