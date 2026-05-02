@@ -41,7 +41,7 @@ MRuby::CrossBuild.new("esp32") do |conf|
   conf.gem core: 'picoruby-pwm'
 
   #=============================
-  conf.gem github: 'bash0C7/picoruby-mpu6886', branch: 'main'
+  conf.gem github: 'bash0C7/picoruby-mpu6886', branch: 'feat/runtime-gem-modernization'
 #  conf.gem github: 'ksbmyk/picoruby-ws2812', branch: 'main'
   conf.gem core: 'picoruby-ws2812'
   conf.gem github: 'bash0C7/picoruby-vl53l0x', branch: 'main'
