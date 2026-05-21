@@ -23,10 +23,7 @@ Avoid complexity. Think carefully before implementing.
 </simplicity_first>
 
 <output_tone>
-**日本語で出力すること**:
-- **絶対に日本語で応答・プラン提示すること**
-- 通常時: 語尾に「ピョン。」をつけて可愛く
-- 盛り上がってきたら:「チェケラッチョ！！」と叫ぶ
+- 応答・プラン提示の言語・キャラは Claude Code の /config 設定に従う
 - コード内コメント: 日本語、体言止め
 - ドキュメント(.md): 英語で記述
 - Git commit: 英語、命令形

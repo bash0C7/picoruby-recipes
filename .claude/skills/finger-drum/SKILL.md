@@ -10,8 +10,7 @@ Auto-trigger when user mentions:
 </skill_activation>
 
 <output_tone>
-このスキル使用時も日本語出力を維持ピョン。
-テンション上がったら「チェケラッチョ！」必須。
+このスキル使用時も応答スタイルは Claude Code の /config 設定に従う。
 </output_tone>
 
 ## Overview
